@@ -71,10 +71,23 @@
                     <a href="{{ url_for('hr.leave_balances') }}" class="btn btn-outline-primary text-start">
                         <i class="fas fa-scale-balanced me-2"></i>Leave Balances
                     </a>
-                </div>
-            </div>
-        </div>
-    </div>
+                    <hr style="margin:4px 0; border-color:var(--border-color);">
+                    <a href="{{ url_for('hr.performance') }}" class="btn btn-outline-primary text-start">
+                        <i class="fas fa-star me-2"></i>Performance Reviews
+                    </a>
+                    <a href="{{ url_for('hr.recruitment') }}" class="btn btn-outline-primary text-start">
+                        <i class="fas fa-user-plus me-2"></i>Recruitment
+                    </a>
+                    <a href="{{ url_for('hr.payroll') }}" class="btn btn-outline-primary text-start">
+                        <i class="fas fa-file-invoice-dollar me-2"></i>Payroll Input
+                    </a>
+                    <a href="{{ url_for('hr.documents') }}" class="btn btn-outline-primary text-start">
+                        <i class="fas fa-folder-open me-2"></i>Documents
+                    </a>
+                </div> <!-- Closing d-grid -->
+            </div> <!-- Closing p-4 -->
+        </div> <!-- Closing data-card -->
+    </div> <!-- Closing col-lg-4 -->
 
     <!-- Department Breakdown -->
     <div class="col-lg-4">

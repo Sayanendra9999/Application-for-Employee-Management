@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}{{ job.title }} — Recruitment{% endblock %}
+{% block page_title %}{{ job.title }}{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="{{ url_for('hr.recruitment') }}" class="btn btn-outline-primary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Back to Recruitment
+    </a>
+</div>
+
+<!-- Job Info -->
+<div class="data-card mb-4">
+    <div class="p-4">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+            <div>
+                <h4 style="font-weight:700; margin-bottom:4px;">{{ job.title }}</h4>
+                <p style="color:var(--text-secondary); margin-bottom:6px;">
+                    {{ job.department.name if job.department else '—' }}
+                    {% if job.designation %} · {{ job.designation.title }}{% endif %}
+                </p>
+                <p style="font-size:0.82rem; color:var(--text-secondary); margin:0;">
+                    Vacancies: <strong>{{ job.vacancies }}</strong> · Posted: {{ job.created_at.strftime('%d %b %Y') }}
+                </p>
+            </div>
+            <div class="d-flex gap-2 align-items-center">
+                {% if job.status == 'Open' %}
+                <span class="badge-status badge-approved">Open</span>
+                {% elif job.status == 'On Hold' %}
+                <span class="badge-status badge-pending">On Hold</span>
+                {% else %}
+                <span class="badge-status badge-hold">Closed</span>
+                {% endif %}
+                <a href="{{ url_for('hr.add_candidate', job_id=job.id) }}" class="btn btn-primary btn-sm">
+                    <i class="fas fa-user-plus me-1"></i>Add Candidate
+                </a>
+            </div>
+        </div>
+        {% if job.description %}
+        <hr>
+        <div style="font-size:0.88rem; white-space:pre-wrap;">{{ job.description }}</div>
+        {% endif %}
+        {% if job.requirements %}
+        <hr>
+        <div style="font-size:0.82rem;"><strong>Requirements:</strong></div>
+        <div style="font-size:0.85rem; white-space:pre-wrap; color:var(--text-secondary);">{{ job.requirements }}</div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Candidates -->
+<div class="data-card">
+    <div class="card-header">
+        <h5><i class="fas fa-users me-2"></i>Candidates ({{ candidates | length }})</h5>
+    </div>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Phone</th>
+                    <th>Status</th>
+                    <th>Interviews</th>
+                    <th>Applied</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in candidates %}
+                <tr>
+                    <td class="fw-semibold">{{ c.name }}</td>
+                    <td style="font-size:0.85rem;">{{ c.email }}</td>
+                    <td style="font-size:0.85rem;">{{ c.phone or '—' }}</td>
+                    <td>
+                        {% set status_colors = {'Applied':'#6366f1','Screening':'#0ea5e9','Interview':'#f59e0b','Offer':'#8b5cf6','Hired':'#10b981','Rejected':'#ef4444'} %}
+                        <span style="background:{{ status_colors.get(c.status, '#94a3b8') }}15; color:{{ status_colors.get(c.status, '#94a3b8') }}; padding:3px 10px; border-radius:20px; font-size:0.75rem; font-weight:600;">{{ c.status }}</span>
+                    </td>
+                    <td style="text-align:center;">
+                        <span style="font-weight:600;">{{ c.interviews.count() }}</span>
+                    </td>
+                    <td style="font-size:0.82rem;">{{ c.applied_at.strftime('%d %b') }}</td>
+                    <td>
+                        <div class="d-flex gap-1">
+                            <a href="{{ url_for('hr.edit_candidate', candidate_id=c.id) }}" class="btn-action" title="Edit"><i class="fas fa-pen-to-square"></i></a>
+                            <a href="{{ url_for('hr.schedule_interview', candidate_id=c.id) }}" class="btn-action" title="Schedule Interview"><i class="fas fa-calendar-plus"></i></a>
+                        </div>
+                    </td>
+                </tr>
+                <!-- Interviews for this candidate -->
+                {% for intv in c.interviews %}
+                <tr style="background:var(--bg-secondary); font-size:0.82rem;">
+                    <td colspan="2" style="padding-left:30px;">
+                        <i class="fas fa-video me-1" style="color:var(--primary);"></i>
+                        {{ intv.interview_type }} — {{ intv.interviewer.full_name if intv.interviewer else '—' }}
+                    </td>
+                    <td>{{ intv.scheduled_at.strftime('%d %b, %H:%M') }}</td>
+                    <td>
+                        <span class="badge-status badge-{{ intv.status | lower }}">{{ intv.status }}</span>
+                    </td>
+                    <td style="text-align:center;">
+                        {% if intv.rating %}
+                        {% for i in range(5) %}
+                        <i class="fas fa-star" style="font-size:0.6rem; color:{% if i < intv.rating %}#f59e0b{% else %}#e2e8f0{% endif %};"></i>
+                        {% endfor %}
+                        {% else %}—{% endif %}
+                    </td>
+                    <td></td>
+                    <td>
+                        {% if intv.status == 'Scheduled' %}
+                        <a href="{{ url_for('hr.interview_feedback', interview_id=intv.id) }}" class="btn-action" title="Add Feedback"><i class="fas fa-comment-dots"></i></a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                {% else %}
+                <tr><td colspan="7" class="text-center py-4" style="color:var(--text-secondary);">No candidates yet</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

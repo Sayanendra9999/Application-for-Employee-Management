@@ -1,18 +1,26 @@
-"""HR routes — Employee management, Attendance, Leave management.
+"""HR routes — Employee management, Attendance, Leave, Performance,
+Recruitment, Payroll Input, Document management.
 
 All operations consume Admin-configured rules via the services layer.
 """
 
+import os
 from datetime import date, datetime
-from flask import render_template, redirect, url_for, flash, request, jsonify
+from flask import (render_template, redirect, url_for, flash, request,
+                   jsonify, current_app, send_from_directory)
 from flask_login import current_user
 from app.hr import bp
 from app.decorators import module_required
 from app.extensions import db
 from app.models import (Employee, User, Leave, Attendance, LeaveBalance,
-                        LeavePolicy, Department, Designation)
+                        LeavePolicy, Department, Designation,
+                        PerformanceReview, PayrollInput, EmployeeDocument,
+                        JobPosting, Candidate, Interview)
 from app.hr.forms import (EmployeeForm, LeaveActionForm, CheckInOutForm,
-                          AttendanceFilterForm)
+                          AttendanceFilterForm, PerformanceReviewForm,
+                          JobPostingForm, CandidateForm, InterviewForm,
+                          InterviewFeedbackForm, PayrollInputForm,
+                          PayrollGenerateForm, DocumentUploadForm)
 from app.hr import services
 
 
@@ -331,3 +339,438 @@ def leave_balances():
 
     return render_template('hr/leave_balances.html', balance_data=balance_data,
                            policies=policies, year=year)
+
+
+# ===========================================================================
+# PERFORMANCE MANAGEMENT (Batch 2)
+# ===========================================================================
+@bp.route('/performance')
+@module_required('hr')
+def performance():
+    period_filter = request.args.get('period', '')
+    dept_filter = request.args.get('department', type=int)
+
+    query = PerformanceReview.query
+    if period_filter:
+        query = query.filter_by(review_period=period_filter)
+    if dept_filter:
+        query = query.join(Employee).filter(Employee.department_id == dept_filter)
+
+    reviews = query.order_by(PerformanceReview.created_at.desc()).all()
+    departments = Department.query.filter_by(is_active=True).order_by(Department.name).all()
+    periods = services.get_review_periods()
+    return render_template('hr/performance.html', reviews=reviews,
+                           departments=departments, periods=periods,
+                           selected_period=period_filter, selected_dept=dept_filter)
+
+
+@bp.route('/performance/add', methods=['GET', 'POST'])
+@module_required('hr')
+def add_performance():
+    form = PerformanceReviewForm()
+    employees = Employee.query.order_by(Employee.emp_code).all()
+    form.employee_id.choices = [(0, '— Select Employee —')] + [
+        (e.id, f'{e.emp_code} — {e.user.full_name}') for e in employees
+    ]
+    form.review_period.choices = services.get_review_periods()
+
+    if form.validate_on_submit():
+        if form.employee_id.data == 0:
+            flash('Please select an employee.', 'danger')
+            return render_template('hr/performance_form.html', form=form, title='Add Review')
+        review = PerformanceReview(
+            employee_id=form.employee_id.data,
+            reviewer_id=current_user.id,
+            review_period=form.review_period.data,
+            rating=form.rating.data,
+            strengths=form.strengths.data or '',
+            improvements=form.improvements.data or '',
+            comments=form.comments.data or '',
+            status='Submitted'
+        )
+        db.session.add(review)
+        services.log_audit(current_user.id, 'CREATE', 'PerformanceReview', None,
+                          f'Submitted review for emp#{review.employee_id}', request.remote_addr or '')
+        db.session.commit()
+        flash('Performance review submitted.', 'success')
+        return redirect(url_for('hr.performance'))
+    return render_template('hr/performance_form.html', form=form, title='Add Performance Review')
+
+
+@bp.route('/performance/<int:review_id>')
+@module_required('hr')
+def performance_detail(review_id):
+    review = PerformanceReview.query.get_or_404(review_id)
+    return render_template('hr/performance_detail.html', review=review)
+
+
+@bp.route('/performance/<int:review_id>/edit', methods=['GET', 'POST'])
+@module_required('hr')
+def edit_performance(review_id):
+    review = PerformanceReview.query.get_or_404(review_id)
+    form = PerformanceReviewForm(obj=review)
+    employees = Employee.query.order_by(Employee.emp_code).all()
+    form.employee_id.choices = [(e.id, f'{e.emp_code} — {e.user.full_name}') for e in employees]
+    form.review_period.choices = services.get_review_periods()
+
+    if form.validate_on_submit():
+        review.employee_id = form.employee_id.data
+        review.review_period = form.review_period.data
+        review.rating = form.rating.data
+        review.strengths = form.strengths.data or ''
+        review.improvements = form.improvements.data or ''
+        review.comments = form.comments.data or ''
+        review.status = 'Submitted'
+        services.log_audit(current_user.id, 'UPDATE', 'PerformanceReview', review.id,
+                          f'Updated review for emp#{review.employee_id}', request.remote_addr or '')
+        db.session.commit()
+        flash('Performance review updated.', 'success')
+        return redirect(url_for('hr.performance'))
+    return render_template('hr/performance_form.html', form=form,
+                           title='Edit Performance Review', review=review)
+
+
+# ===========================================================================
+# RECRUITMENT (Batch 2)
+# ===========================================================================
+@bp.route('/recruitment')
+@module_required('hr')
+def recruitment():
+    status_filter = request.args.get('status', '')
+    query = JobPosting.query
+    if status_filter:
+        query = query.filter_by(status=status_filter)
+    jobs = query.order_by(JobPosting.created_at.desc()).all()
+
+    # Pipeline stats
+    total_candidates = Candidate.query.count()
+    pipeline = {}
+    for status in ['Applied', 'Screening', 'Interview', 'Offer', 'Hired', 'Rejected']:
+        pipeline[status] = Candidate.query.filter_by(status=status).count()
+
+    return render_template('hr/recruitment.html', jobs=jobs, pipeline=pipeline,
+                           total_candidates=total_candidates, selected_status=status_filter)
+
+
+@bp.route('/recruitment/jobs/add', methods=['GET', 'POST'])
+@module_required('hr')
+def add_job():
+    form = JobPostingForm()
+    form.department_id.choices = [(0, '— Select —')] + services.get_departments_for_dropdown()
+    form.designation_id.choices = [(0, '— Optional —')] + services.get_designations_for_dropdown()
+
+    if form.validate_on_submit():
+        job = JobPosting(
+            title=form.title.data,
+            department_id=form.department_id.data if form.department_id.data != 0 else None,
+            designation_id=form.designation_id.data if form.designation_id.data != 0 else None,
+            description=form.description.data or '',
+            requirements=form.requirements.data or '',
+            vacancies=form.vacancies.data,
+            status=form.status.data,
+            created_by=current_user.id
+        )
+        db.session.add(job)
+        services.log_audit(current_user.id, 'CREATE', 'JobPosting', None,
+                          f'Created job posting: {job.title}', request.remote_addr or '')
+        db.session.commit()
+        flash(f'Job posting "{job.title}" created.', 'success')
+        return redirect(url_for('hr.recruitment'))
+    return render_template('hr/job_form.html', form=form, title='Create Job Posting')
+
+
+@bp.route('/recruitment/jobs/<int:job_id>')
+@module_required('hr')
+def job_detail(job_id):
+    job = JobPosting.query.get_or_404(job_id)
+    candidates = Candidate.query.filter_by(job_id=job.id).order_by(Candidate.applied_at.desc()).all()
+    return render_template('hr/job_detail.html', job=job, candidates=candidates)
+
+
+@bp.route('/recruitment/jobs/<int:job_id>/candidates/add', methods=['GET', 'POST'])
+@module_required('hr')
+def add_candidate(job_id):
+    job = JobPosting.query.get_or_404(job_id)
+    form = CandidateForm()
+
+    if form.validate_on_submit():
+        candidate = Candidate(
+            job_id=job.id,
+            name=form.name.data,
+            email=form.email.data,
+            phone=form.phone.data or '',
+            status=form.status.data,
+            notes=form.notes.data or ''
+        )
+        db.session.add(candidate)
+        services.log_audit(current_user.id, 'CREATE', 'Candidate', None,
+                          f'Added candidate {candidate.name} for {job.title}', request.remote_addr or '')
+        db.session.commit()
+        flash(f'Candidate "{candidate.name}" added.', 'success')
+        return redirect(url_for('hr.job_detail', job_id=job.id))
+    return render_template('hr/candidate_form.html', form=form, job=job, title='Add Candidate')
+
+
+@bp.route('/recruitment/candidates/<int:candidate_id>/edit', methods=['GET', 'POST'])
+@module_required('hr')
+def edit_candidate(candidate_id):
+    candidate = Candidate.query.get_or_404(candidate_id)
+    form = CandidateForm(obj=candidate)
+
+    if form.validate_on_submit():
+        old_status = candidate.status
+        candidate.name = form.name.data
+        candidate.email = form.email.data
+        candidate.phone = form.phone.data or ''
+        candidate.status = form.status.data
+        candidate.notes = form.notes.data or ''
+        services.log_audit(current_user.id, 'UPDATE', 'Candidate', candidate.id,
+                          f'Status: {old_status} → {candidate.status}', request.remote_addr or '')
+        db.session.commit()
+        flash(f'Candidate "{candidate.name}" updated.', 'success')
+        return redirect(url_for('hr.job_detail', job_id=candidate.job_id))
+    return render_template('hr/candidate_form.html', form=form, job=candidate.job,
+                           title='Edit Candidate', candidate=candidate)
+
+
+@bp.route('/recruitment/candidates/<int:candidate_id>/interview', methods=['GET', 'POST'])
+@module_required('hr')
+def schedule_interview(candidate_id):
+    candidate = Candidate.query.get_or_404(candidate_id)
+    form = InterviewForm()
+    users = User.query.filter_by(is_active_user=True).order_by(User.full_name).all()
+    form.interviewer_id.choices = [(0, '— Select —')] + [(u.id, u.full_name) for u in users]
+
+    if form.validate_on_submit():
+        # Combine date and time into a datetime
+        scheduled_dt = datetime.combine(form.scheduled_date.data,
+                                        datetime.strptime(form.scheduled_time.data, '%H:%M').time())
+        interview = Interview(
+            candidate_id=candidate.id,
+            interviewer_id=form.interviewer_id.data,
+            scheduled_at=scheduled_dt,
+            duration_mins=form.duration_mins.data,
+            interview_type=form.interview_type.data,
+            status='Scheduled'
+        )
+        db.session.add(interview)
+
+        # Auto-update candidate status to Interview
+        if candidate.status in ('Applied', 'Screening'):
+            candidate.status = 'Interview'
+
+        services.log_audit(current_user.id, 'CREATE', 'Interview', None,
+                          f'Scheduled {interview.interview_type} for {candidate.name}',
+                          request.remote_addr or '')
+        db.session.commit()
+        flash(f'Interview scheduled for {candidate.name}.', 'success')
+        return redirect(url_for('hr.job_detail', job_id=candidate.job_id))
+    return render_template('hr/interview_form.html', form=form, candidate=candidate,
+                           title='Schedule Interview')
+
+
+@bp.route('/recruitment/interviews/<int:interview_id>/feedback', methods=['GET', 'POST'])
+@module_required('hr')
+def interview_feedback(interview_id):
+    interview = Interview.query.get_or_404(interview_id)
+    form = InterviewFeedbackForm()
+
+    if form.validate_on_submit():
+        interview.rating = form.rating.data
+        interview.feedback = form.feedback.data
+        interview.status = 'Completed'
+        services.log_audit(current_user.id, 'UPDATE', 'Interview', interview.id,
+                          f'Feedback rating: {interview.rating}/5', request.remote_addr or '')
+        db.session.commit()
+        flash('Interview feedback submitted.', 'success')
+        return redirect(url_for('hr.job_detail', job_id=interview.candidate.job_id))
+    return render_template('hr/interview_feedback.html', form=form, interview=interview,
+                           title='Interview Feedback')
+
+
+# ===========================================================================
+# PAYROLL INPUT (Batch 2)
+# ===========================================================================
+@bp.route('/payroll')
+@module_required('hr')
+def payroll():
+    year = request.args.get('year', date.today().year, type=int)
+    month_name = request.args.get('month', '')
+
+    query = PayrollInput.query.filter_by(year=year)
+    if month_name:
+        query = query.filter_by(month=month_name)
+
+    inputs = query.join(Employee).order_by(Employee.emp_code).all()
+    months = ['January', 'February', 'March', 'April', 'May', 'June',
+              'July', 'August', 'September', 'October', 'November', 'December']
+    return render_template('hr/payroll_input.html', inputs=inputs, year=year,
+                           months=months, selected_month=month_name)
+
+
+@bp.route('/payroll/generate', methods=['GET', 'POST'])
+@module_required('hr')
+def payroll_generate():
+    form = PayrollGenerateForm()
+    month_choices = [(i, m) for i, m in enumerate(
+        ['', 'January', 'February', 'March', 'April', 'May', 'June',
+         'July', 'August', 'September', 'October', 'November', 'December']
+    ) if i > 0]
+    form.month.choices = month_choices
+    form.year.data = form.year.data or date.today().year
+
+    if form.validate_on_submit():
+        created, skipped = services.generate_payroll_inputs(form.year.data, form.month.data)
+        services.log_audit(current_user.id, 'CREATE', 'PayrollInput', None,
+                          f'Generated payroll: {created} created, {skipped} skipped',
+                          request.remote_addr or '')
+        db.session.commit()
+        flash(f'Payroll inputs generated: {created} created, {skipped} already existed.', 'success')
+        month_names = ['', 'January', 'February', 'March', 'April', 'May', 'June',
+                       'July', 'August', 'September', 'October', 'November', 'December']
+        return redirect(url_for('hr.payroll', year=form.year.data,
+                                month=month_names[form.month.data]))
+    return render_template('hr/payroll_generate.html', form=form, title='Generate Payroll Inputs')
+
+
+@bp.route('/payroll/<int:payroll_id>/edit', methods=['GET', 'POST'])
+@module_required('hr')
+def payroll_edit(payroll_id):
+    pi = PayrollInput.query.get_or_404(payroll_id)
+    if pi.status == 'Submitted':
+        flash('Cannot edit submitted payroll input.', 'danger')
+        return redirect(url_for('hr.payroll'))
+
+    form = PayrollInputForm(obj=pi)
+    if form.validate_on_submit():
+        pi.overtime_hours = form.overtime_hours.data or 0
+        pi.bonus = form.bonus.data or 0
+        pi.deduction_notes = form.deduction_notes.data or ''
+        services.log_audit(current_user.id, 'UPDATE', 'PayrollInput', pi.id,
+                          f'Updated payroll for emp#{pi.employee_id}', request.remote_addr or '')
+        db.session.commit()
+        flash('Payroll input updated.', 'success')
+        return redirect(url_for('hr.payroll', year=pi.year, month=pi.month))
+    return render_template('hr/payroll_form.html', form=form, payroll=pi,
+                           title=f'Edit Payroll — {pi.employee.user.full_name}')
+
+
+@bp.route('/payroll/submit', methods=['POST'])
+@module_required('hr')
+def payroll_submit():
+    """Bulk submit all Draft payroll inputs for a month."""
+    year = request.form.get('year', type=int)
+    month = request.form.get('month', '')
+    if not year or not month:
+        flash('Invalid month/year.', 'danger')
+        return redirect(url_for('hr.payroll'))
+
+    drafts = PayrollInput.query.filter_by(year=year, month=month, status='Draft').all()
+    count = 0
+    for pi in drafts:
+        pi.status = 'Submitted'
+        pi.submitted_by = current_user.id
+        count += 1
+
+    if count > 0:
+        services.log_audit(current_user.id, 'SUBMIT', 'PayrollInput', None,
+                          f'Submitted {count} payroll inputs for {month} {year}',
+                          request.remote_addr or '')
+        db.session.commit()
+        flash(f'{count} payroll inputs submitted to Finance.', 'success')
+    else:
+        flash('No draft payroll inputs to submit.', 'warning')
+    return redirect(url_for('hr.payroll', year=year, month=month))
+
+
+# ===========================================================================
+# DOCUMENT MANAGEMENT (Batch 2)
+# ===========================================================================
+@bp.route('/documents')
+@module_required('hr')
+def documents():
+    emp_filter = request.args.get('employee', type=int)
+    query = EmployeeDocument.query
+    if emp_filter:
+        query = query.filter_by(employee_id=emp_filter)
+    docs = query.order_by(EmployeeDocument.uploaded_at.desc()).all()
+    employees = Employee.query.order_by(Employee.emp_code).all()
+    return render_template('hr/documents.html', documents=docs, employees=employees,
+                           selected_emp=emp_filter)
+
+
+@bp.route('/documents/upload', methods=['GET', 'POST'])
+@module_required('hr')
+def document_upload():
+    form = DocumentUploadForm()
+    employees = Employee.query.order_by(Employee.emp_code).all()
+    form.employee_id.choices = [(0, '— Select Employee —')] + [
+        (e.id, f'{e.emp_code} — {e.user.full_name}') for e in employees
+    ]
+
+    if form.validate_on_submit():
+        if form.employee_id.data == 0:
+            flash('Please select an employee.', 'danger')
+            return render_template('hr/document_upload.html', form=form, title='Upload Document')
+
+        file = form.document.data
+        emp = Employee.query.get(form.employee_id.data)
+        if not emp:
+            flash('Employee not found.', 'danger')
+            return redirect(url_for('hr.documents'))
+
+        # Ensure upload directory exists
+        upload_folder = current_app.config.get('UPLOAD_FOLDER', 'static/uploads/documents')
+        os.makedirs(upload_folder, exist_ok=True)
+
+        # Generate safe filename
+        safe_name = services.generate_safe_filename(file.filename, emp.emp_code)
+        filepath = os.path.join(upload_folder, safe_name)
+        file.save(filepath)
+
+        doc = EmployeeDocument(
+            employee_id=emp.id,
+            doc_type=form.doc_type.data,
+            filename=safe_name,
+            original_name=file.filename,
+            uploaded_by=current_user.id
+        )
+        db.session.add(doc)
+        services.log_audit(current_user.id, 'CREATE', 'EmployeeDocument', None,
+                          f'Uploaded {form.doc_type.data} for {emp.emp_code}',
+                          request.remote_addr or '')
+        db.session.commit()
+        flash(f'Document "{file.filename}" uploaded for {emp.emp_code}.', 'success')
+        return redirect(url_for('hr.documents', employee=emp.id))
+    return render_template('hr/document_upload.html', form=form, title='Upload Document')
+
+
+@bp.route('/documents/<int:doc_id>/download')
+@module_required('hr')
+def document_download(doc_id):
+    doc = EmployeeDocument.query.get_or_404(doc_id)
+    upload_folder = current_app.config.get('UPLOAD_FOLDER', 'static/uploads/documents')
+    return send_from_directory(upload_folder, doc.filename,
+                               as_attachment=True,
+                               download_name=doc.original_name)
+
+
+@bp.route('/documents/<int:doc_id>/delete', methods=['POST'])
+@module_required('hr')
+def document_delete(doc_id):
+    doc = EmployeeDocument.query.get_or_404(doc_id)
+    emp_id = doc.employee_id
+
+    # Delete the file from disk
+    upload_folder = current_app.config.get('UPLOAD_FOLDER', 'static/uploads/documents')
+    filepath = os.path.join(upload_folder, doc.filename)
+    if os.path.exists(filepath):
+        os.remove(filepath)
+
+    services.log_audit(current_user.id, 'DELETE', 'EmployeeDocument', doc.id,
+                      f'Deleted {doc.doc_type} ({doc.original_name})',
+                      request.remote_addr or '')
+    db.session.delete(doc)
+    db.session.commit()
+    flash('Document deleted.', 'warning')
+    return redirect(url_for('hr.documents', employee=emp_id))

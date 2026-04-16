@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Documents — Enterprise Portal{% endblock %}
+{% block page_title %}Employee Documents{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 style="font-weight:700;">Employee Documents</h4>
+        <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">{{ documents | length }} documents</p>
+    </div>
+    <a href="{{ url_for('hr.document_upload') }}" class="btn btn-primary">
+        <i class="fas fa-cloud-arrow-up me-2"></i>Upload Document
+    </a>
+</div>
+
+<!-- Filter -->
+<div class="data-card mb-4" style="padding:12px 20px;">
+    <form method="GET" class="d-flex gap-2 align-items-center flex-wrap">
+        <label style="font-size:0.82rem; font-weight:600; white-space:nowrap;">Employee:</label>
+        <select name="employee" class="form-select form-select-sm" style="max-width:280px;" onchange="this.form.submit()">
+            <option value="">All Employees</option>
+            {% for e in employees %}
+            <option value="{{ e.id }}" {% if selected_emp == e.id %}selected{% endif %}>{{ e.emp_code }} — {{ e.user.full_name }}</option>
+            {% endfor %}
+        </select>
+        {% if selected_emp %}
+        <a href="{{ url_for('hr.documents') }}" class="btn btn-outline-secondary btn-sm">Clear</a>
+        {% endif %}
+    </form>
+</div>
+
+<div class="data-card">
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Employee</th>
+                    <th>Document Type</th>
+                    <th>File Name</th>
+                    <th>Uploaded</th>
+                    <th>Uploaded By</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for doc in documents %}
+                <tr>
+                    <td class="fw-semibold">{{ doc.employee.user.full_name }}</td>
+                    <td><span class="badge bg-light text-dark border" style="font-size:0.75rem;">{{ doc.doc_type }}</span></td>
+                    <td style="font-size:0.85rem;">
+                        <i class="fas fa-file me-1" style="color:var(--primary);"></i>
+                        {{ doc.original_name }}
+                    </td>
+                    <td style="font-size:0.82rem;">{{ doc.uploaded_at.strftime('%d %b %Y') }}</td>
+                    <td style="font-size:0.82rem;">{{ doc.uploader.full_name if doc.uploader else '—' }}</td>
+                    <td>
+                        <div class="d-flex gap-1">
+                            <a href="{{ url_for('hr.document_download', doc_id=doc.id) }}" class="btn-action" title="Download">
+                                <i class="fas fa-download"></i>
+                            </a>
+                            <form method="POST" action="{{ url_for('hr.document_delete', doc_id=doc.id) }}" class="d-inline" onsubmit="return confirm('Delete this document?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn-action danger" title="Delete">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="text-center py-4" style="color:var(--text-secondary);">No documents uploaded yet</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

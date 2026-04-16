@@ -271,3 +271,96 @@ def get_designations_for_department(department_id):
         department_id=department_id, is_active=True
     ).order_by(Designation.title).all()
     return [{'id': d.id, 'title': d.title, 'level': d.level} for d in desigs]
+
+
+# ===========================================================================
+# PAYROLL INPUT SERVICES (Batch 2)
+# ===========================================================================
+def generate_payroll_inputs(year, month):
+    """Auto-generate payroll input rows for all employees for a given month.
+    Pulls attendance summary and leave data. Returns (created_count, skipped_count)."""
+    from app.models import PayrollInput
+    from calendar import monthrange
+
+    employees = Employee.query.filter_by(is_active=True).all()
+    created = 0
+    skipped = 0
+    month_names = ['', 'January', 'February', 'March', 'April', 'May', 'June',
+                   'July', 'August', 'September', 'October', 'November', 'December']
+    month_name = month_names[month]
+
+    for emp in employees:
+        # Check if already exists
+        existing = PayrollInput.query.filter_by(
+            employee_id=emp.id, month=month_name, year=year
+        ).first()
+        if existing:
+            skipped += 1
+            continue
+
+        # Get attendance summary
+        summary = get_attendance_summary(emp.id, year, month)
+
+        # Count working days in the month (Mon-Fri)
+        _, days_in_month = monthrange(year, month)
+        working_days = sum(1 for d in range(1, days_in_month + 1)
+                          if date(year, month, d).weekday() < 5)
+
+        # Count approved leaves in the month
+        start_date = date(year, month, 1)
+        end_date = date(year, month, days_in_month)
+        leaves_taken = Leave.query.filter(
+            Leave.employee_id == emp.id,
+            Leave.status == 'Approved',
+            Leave.start_date <= end_date,
+            Leave.end_date >= start_date
+        ).count()
+
+        payroll = PayrollInput(
+            employee_id=emp.id,
+            month=month_name,
+            year=year,
+            working_days=working_days,
+            present_days=int(summary['effective_days']),
+            leaves_taken=leaves_taken,
+            overtime_hours=0.0,
+            bonus=0.0,
+            deduction_notes='',
+            status='Draft'
+        )
+        db.session.add(payroll)
+        created += 1
+
+    db.session.flush()
+    return created, skipped
+
+
+# ===========================================================================
+# DOCUMENT MANAGEMENT SERVICES (Batch 2)
+# ===========================================================================
+def allowed_file(filename, allowed_extensions):
+    """Check if a filename has an allowed extension."""
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in allowed_extensions
+
+
+def generate_safe_filename(original_name, emp_code):
+    """Generate a safe, unique filename for storage."""
+    import uuid
+    ext = original_name.rsplit('.', 1)[1].lower() if '.' in original_name else 'bin'
+    unique_id = uuid.uuid4().hex[:8]
+    return f"{emp_code}_{unique_id}.{ext}"
+
+
+# ===========================================================================
+# PERFORMANCE REVIEW SERVICES (Batch 2)
+# ===========================================================================
+def get_review_periods():
+    """Generate review period options for the form dropdown."""
+    current_year = date.today().year
+    periods = []
+    for y in range(current_year, current_year - 2, -1):
+        periods.append((f'Annual-{y}', f'Annual Review {y}'))
+        for q in range(4, 0, -1):
+            periods.append((f'Q{q}-{y}', f'Q{q} {y}'))
+    return periods

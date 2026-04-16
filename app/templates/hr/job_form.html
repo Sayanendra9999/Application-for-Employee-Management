@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — Enterprise Portal{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="{{ url_for('hr.recruitment') }}" class="btn btn-outline-primary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Back to Recruitment
+    </a>
+</div>
+<div class="form-card">
+    <form method="POST" novalidate>
+        {{ form.hidden_tag() }}
+        <div class="row g-3">
+            <div class="col-md-12">
+                {{ form.title.label(class="form-label") }}
+                {{ form.title(class="form-control", placeholder="Senior Software Developer") }}
+            </div>
+            <div class="col-md-6">
+                {{ form.department_id.label(class="form-label") }}
+                {{ form.department_id(class="form-select") }}
+            </div>
+            <div class="col-md-6">
+                {{ form.designation_id.label(class="form-label") }}
+                {{ form.designation_id(class="form-select") }}
+            </div>
+            <div class="col-md-6">
+                {{ form.vacancies.label(class="form-label") }}
+                {{ form.vacancies(class="form-control") }}
+            </div>
+            <div class="col-md-6">
+                {{ form.status.label(class="form-label") }}
+                {{ form.status(class="form-select") }}
+            </div>
+            <div class="col-md-12">
+                {{ form.description.label(class="form-label") }}
+                {{ form.description(class="form-control", rows=4, placeholder="Describe the role, responsibilities...") }}
+            </div>
+            <div class="col-md-12">
+                {{ form.requirements.label(class="form-label") }}
+                {{ form.requirements(class="form-control", rows=3, placeholder="Required skills, experience...") }}
+            </div>
+        </div>
+        <hr class="my-4">
+        <div class="d-flex gap-2">
+            {{ form.submit(class="btn btn-primary") }}
+            <a href="{{ url_for('hr.recruitment') }}" class="btn btn-outline-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

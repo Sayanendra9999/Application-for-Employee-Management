@@ -11,7 +11,8 @@ from app.models import (User, Module, UserModule, Employee, Leave, LeaveBalance,
                         Attendance, Project, ProjectMember, Task,
                         Milestone, Notification,
                         Expense, Invoice, SalaryRecord,
-                        Department, Designation, LeavePolicy, AttendanceRule)
+                        Department, Designation, LeavePolicy, AttendanceRule,
+                        PerformanceReview, JobPosting, Candidate, Interview)
 
 
 def seed():
@@ -524,6 +525,101 @@ def seed():
                 db.session.add(sal)
 
         print("[OK] Salary records created.")
+
+        # ── Performance Reviews (Batch 2) ────────────────────────────────
+        perf_data = [
+            {'emp': 'john_doe', 'period': 'Q1-2026', 'rating': 4,
+             'strengths': 'Strong coding skills, good team player, quick learner',
+             'improvements': 'Could improve code documentation and testing practices',
+             'comments': 'Excellent progress in Q1. Recommend for senior developer consideration.'},
+            {'emp': 'jane_smith', 'period': 'Q1-2026', 'rating': 5,
+             'strengths': 'Exceptional attention to detail, accurate financial reporting',
+             'improvements': 'Could take more initiative in process improvement',
+             'comments': 'Outstanding performance. Key contributor to financial module.'},
+            {'emp': 'bob_wilson', 'period': 'Q1-2026', 'rating': 3,
+             'strengths': 'Good communication skills, reliable employee',
+             'improvements': 'Needs to improve HR analytics skills and policy knowledge',
+             'comments': 'Solid performer. Training recommended for HR analytics tools.'},
+            {'emp': 'pm_lead', 'period': 'Annual-2025', 'rating': 5,
+             'strengths': 'Excellent leadership, strong technical architecture skills',
+             'improvements': 'Delegation skills could be improved',
+             'comments': 'High performer. Promoted to Tech Lead based on 2025 annual review.'},
+        ]
+        for pd in perf_data:
+            review = PerformanceReview(
+                employee_id=emp_objects[pd['emp']].id,
+                reviewer_id=user_objects['hr_manager'].id,
+                review_period=pd['period'],
+                rating=pd['rating'],
+                strengths=pd['strengths'],
+                improvements=pd['improvements'],
+                comments=pd['comments'],
+                status='Submitted'
+            )
+            db.session.add(review)
+        print("[OK] Performance reviews created.")
+
+        # ── Job Postings & Candidates (Batch 2) ─────────────────────────
+        job1 = JobPosting(
+            title='Senior Software Developer',
+            department_id=dept_map['ENG'].id,
+            description='Looking for an experienced developer to join the engineering team.',
+            requirements='5+ years experience in Python/Flask, strong SQL skills, team leadership experience.',
+            vacancies=2, status='Open', created_by=user_objects['hr_manager'].id
+        )
+        job2 = JobPosting(
+            title='Marketing Executive',
+            department_id=dept_map['MKT'].id,
+            description='Drive digital marketing campaigns and brand visibility.',
+            requirements='2+ years in digital marketing, SEO/SEM skills, content creation experience.',
+            vacancies=1, status='Open', created_by=user_objects['hr_manager'].id
+        )
+        db.session.add_all([job1, job2])
+        db.session.flush()
+
+        candidates_data = [
+            {'job': job1, 'name': 'Arjun Mehta', 'email': 'arjun.m@email.com',
+             'phone': '+91 88888 11111', 'status': 'Interview',
+             'notes': '7 years Python experience, ex-Google'},
+            {'job': job1, 'name': 'Sneha Rao', 'email': 'sneha.r@email.com',
+             'phone': '+91 88888 22222', 'status': 'Screening',
+             'notes': '5 years Flask/Django, strong backend skills'},
+            {'job': job1, 'name': 'Vikram Singh', 'email': 'vikram.s@email.com',
+             'phone': '+91 88888 33333', 'status': 'Applied',
+             'notes': '4 years fullstack, React + Python'},
+            {'job': job2, 'name': 'Pooja Nair', 'email': 'pooja.n@email.com',
+             'phone': '+91 88888 44444', 'status': 'Offer',
+             'notes': '3 years digital marketing, strong analytics skills'},
+            {'job': job2, 'name': 'Karan Joshi', 'email': 'karan.j@email.com',
+             'phone': '+91 88888 55555', 'status': 'Rejected',
+             'notes': 'Good profile but lacks required SEO experience'},
+        ]
+        candidate_objects = []
+        for cd in candidates_data:
+            c = Candidate(
+                job_id=cd['job'].id, name=cd['name'], email=cd['email'],
+                phone=cd['phone'], status=cd['status'], notes=cd['notes']
+            )
+            db.session.add(c)
+            db.session.flush()
+            candidate_objects.append(c)
+
+        # Schedule interviews
+        tomorrow = date.today() + timedelta(days=1)
+        intv1 = Interview(
+            candidate_id=candidate_objects[0].id,
+            interviewer_id=user_objects['pm_lead'].id,
+            scheduled_at=datetime.combine(tomorrow, datetime.strptime('10:00', '%H:%M').time()),
+            duration_mins=60, interview_type='Technical', status='Scheduled'
+        )
+        intv2 = Interview(
+            candidate_id=candidate_objects[0].id,
+            interviewer_id=user_objects['hr_manager'].id,
+            scheduled_at=datetime.combine(tomorrow, datetime.strptime('14:00', '%H:%M').time()),
+            duration_mins=45, interview_type='HR', status='Scheduled'
+        )
+        db.session.add_all([intv1, intv2])
+        print("[OK] Recruitment data created (jobs, candidates, interviews).")
 
         # ── Commit all ───────────────────────────────────────────────────
         db.session.commit()

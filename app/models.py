@@ -581,6 +581,8 @@ class JobPosting(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     creator = db.relationship('User', foreign_keys=[created_by])
+    department = db.relationship('Department', foreign_keys=[department_id])
+    designation = db.relationship('Designation', foreign_keys=[designation_id])
     candidates = db.relationship('Candidate', backref='job', lazy='dynamic')
 
     def __repr__(self):
@@ -648,7 +650,7 @@ class PerformanceReview(db.Model):
     status = db.Column(db.String(20), default='Draft')              # Draft, Submitted, Acknowledged
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    employee_rel = db.relationship('Employee', backref='reviews')
+    employee = db.relationship('Employee', backref='performance_reviews')
     reviewer = db.relationship('User', foreign_keys=[reviewer_id])
 
     def __repr__(self):

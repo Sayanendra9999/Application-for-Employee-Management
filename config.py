@@ -10,3 +10,8 @@ class Config:
         'sqlite:///' + os.path.join(basedir, 'enterprise_portal.db')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     WTF_CSRF_ENABLED = True
+
+    # File uploads
+    UPLOAD_FOLDER = os.path.join(basedir, 'static', 'uploads', 'documents')
+    MAX_CONTENT_LENGTH = 5 * 1024 * 1024  # 5 MB
+    ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'txt', 'xlsx', 'xls'}

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — Enterprise Portal{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="{{ url_for('hr.documents') }}" class="btn btn-outline-primary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Back to Documents
+    </a>
+</div>
+
+<div style="background:var(--bg-card); border:1px solid var(--border-color); border-radius:12px; padding:14px 20px; margin-bottom:20px; font-size:0.85rem;">
+    <i class="fas fa-info-circle me-1" style="color:var(--primary);"></i>
+    Max file size: <strong>5 MB</strong> · Allowed: PDF, DOC, DOCX, JPG, PNG, TXT, XLSX, XLS
+</div>
+
+<div class="form-card">
+    <form method="POST" enctype="multipart/form-data" novalidate>
+        {{ form.hidden_tag() }}
+        <div class="row g-3">
+            <div class="col-md-6">
+                {{ form.employee_id.label(class="form-label") }}
+                {{ form.employee_id(class="form-select") }}
+            </div>
+            <div class="col-md-6">
+                {{ form.doc_type.label(class="form-label") }}
+                {{ form.doc_type(class="form-select") }}
+            </div>
+            <div class="col-md-12">
+                {{ form.document.label(class="form-label") }}
+                {{ form.document(class="form-control") }}
+            </div>
+        </div>
+        <hr class="my-4">
+        <div class="d-flex gap-2">
+            {{ form.submit(class="btn btn-primary") }}
+            <a href="{{ url_for('hr.documents') }}" class="btn btn-outline-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

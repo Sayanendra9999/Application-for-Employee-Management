@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — Enterprise Portal{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="{{ url_for('hr.job_detail', job_id=candidate.job_id) }}" class="btn btn-outline-primary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Back to {{ candidate.job.title }}
+    </a>
+</div>
+
+<div style="background:var(--bg-card); border:1px solid var(--border-color); border-radius:12px; padding:14px 20px; margin-bottom:20px; font-size:0.85rem;">
+    <i class="fas fa-user me-1" style="color:var(--primary);"></i>
+    Scheduling interview for <strong>{{ candidate.name }}</strong> ({{ candidate.email }})
+</div>
+
+<div class="form-card">
+    <form method="POST" novalidate>
+        {{ form.hidden_tag() }}
+        <div class="row g-3">
+            <div class="col-md-6">
+                {{ form.interviewer_id.label(class="form-label") }}
+                {{ form.interviewer_id(class="form-select") }}
+            </div>
+            <div class="col-md-6">
+                {{ form.interview_type.label(class="form-label") }}
+                {{ form.interview_type(class="form-select") }}
+            </div>
+            <div class="col-md-4">
+                {{ form.scheduled_date.label(class="form-label") }}
+                {{ form.scheduled_date(class="form-control", type="date") }}
+            </div>
+            <div class="col-md-4">
+                {{ form.scheduled_time.label(class="form-label") }}
+                {{ form.scheduled_time(class="form-control", type="time") }}
+            </div>
+            <div class="col-md-4">
+                {{ form.duration_mins.label(class="form-label") }}
+                {{ form.duration_mins(class="form-control") }}
+            </div>
+        </div>
+        <hr class="my-4">
+        <div class="d-flex gap-2">
+            {{ form.submit(class="btn btn-primary") }}
+            <a href="{{ url_for('hr.job_detail', job_id=candidate.job_id) }}" class="btn btn-outline-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — Enterprise Portal{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="{{ url_for('hr.payroll') }}" class="btn btn-outline-primary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Back to Payroll
+    </a>
+</div>
+
+<div style="background:var(--bg-card); border:1px solid var(--border-color); border-radius:12px; padding:14px 20px; margin-bottom:20px; font-size:0.85rem;">
+    <i class="fas fa-info-circle me-1" style="color:var(--primary);"></i>
+    This will auto-generate payroll input rows for all employees. Attendance and leave data will be pulled automatically.
+    HR can then edit bonus, overtime, and deductions before submitting to Finance.
+</div>
+
+<div class="form-card">
+    <form method="POST" novalidate>
+        {{ form.hidden_tag() }}
+        <div class="row g-3">
+            <div class="col-md-6">
+                {{ form.month.label(class="form-label") }}
+                {{ form.month(class="form-select") }}
+            </div>
+            <div class="col-md-6">
+                {{ form.year.label(class="form-label") }}
+                {{ form.year(class="form-control") }}
+            </div>
+        </div>
+        <hr class="my-4">
+        <div class="d-flex gap-2">
+            {{ form.submit(class="btn btn-primary") }}
+            <a href="{{ url_for('hr.payroll') }}" class="btn btn-outline-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

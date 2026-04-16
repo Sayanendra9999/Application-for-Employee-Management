@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Performance Reviews — Enterprise Portal{% endblock %}
+{% block page_title %}Performance Reviews{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 style="font-weight:700;">Performance Reviews</h4>
+        <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">{{ reviews | length }} reviews</p>
+    </div>
+    <a href="{{ url_for('hr.add_performance') }}" class="btn btn-primary">
+        <i class="fas fa-plus me-2"></i>Add Review
+    </a>
+</div>
+
+<!-- Filters -->
+<div class="data-card mb-4" style="padding:12px 20px;">
+    <form method="GET" class="row g-2 align-items-end">
+        <div class="col-md-4">
+            <label class="form-label" style="font-size:0.8rem;">Period</label>
+            <select name="period" class="form-select form-select-sm">
+                <option value="">All Periods</option>
+                {% for val, label in periods %}
+                <option value="{{ val }}" {% if selected_period == val %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label" style="font-size:0.8rem;">Department</label>
+            <select name="department" class="form-select form-select-sm">
+                <option value="">All</option>
+                {% for dept in departments %}
+                <option value="{{ dept.id }}" {% if selected_dept == dept.id %}selected{% endif %}>{{ dept.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <button type="submit" class="btn btn-primary btn-sm w-100"><i class="fas fa-search me-1"></i>Filter</button>
+        </div>
+        <div class="col-md-2">
+            <a href="{{ url_for('hr.performance') }}" class="btn btn-outline-secondary btn-sm w-100">Clear</a>
+        </div>
+    </form>
+</div>
+
+<div class="data-card">
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Employee</th>
+                    <th>Department</th>
+                    <th>Period</th>
+                    <th style="text-align:center;">Rating</th>
+                    <th>Reviewer</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in reviews %}
+                <tr>
+                    <td class="fw-semibold">{{ r.employee.user.full_name }}</td>
+                    <td><span class="badge bg-light text-dark border" style="font-size:0.7rem;">{{ r.employee.department_name }}</span></td>
+                    <td>{{ r.review_period }}</td>
+                    <td style="text-align:center;">
+                        {% for i in range(5) %}
+                        <i class="fas fa-star" style="font-size:0.7rem; color:{% if i < r.rating %}#f59e0b{% else %}#e2e8f0{% endif %};"></i>
+                        {% endfor %}
+                        <span style="font-size:0.75rem; margin-left:4px; font-weight:600;">{{ r.rating }}/5</span>
+                    </td>
+                    <td style="font-size:0.85rem;">{{ r.reviewer.full_name if r.reviewer else '—' }}</td>
+                    <td><span class="badge-status badge-{{ r.status | lower }}">{{ r.status }}</span></td>
+                    <td>
+                        <div class="d-flex gap-1">
+                            <a href="{{ url_for('hr.performance_detail', review_id=r.id) }}" class="btn-action" title="View"><i class="fas fa-eye"></i></a>
+                            <a href="{{ url_for('hr.edit_performance', review_id=r.id) }}" class="btn-action" title="Edit"><i class="fas fa-pen-to-square"></i></a>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" class="text-center py-4" style="color:var(--text-secondary);">No performance reviews found</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

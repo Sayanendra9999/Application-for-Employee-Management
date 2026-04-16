@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — Enterprise Portal{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="{{ url_for('hr.performance') }}" class="btn btn-outline-primary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Back to Reviews
+    </a>
+</div>
+<div class="form-card">
+    <form method="POST" novalidate>
+        {{ form.hidden_tag() }}
+        <div class="row g-3">
+            <div class="col-md-6">
+                {{ form.employee_id.label(class="form-label") }}
+                {{ form.employee_id(class="form-select") }}
+            </div>
+            <div class="col-md-6">
+                {{ form.review_period.label(class="form-label") }}
+                {{ form.review_period(class="form-select") }}
+            </div>
+            <div class="col-md-12">
+                {{ form.rating.label(class="form-label") }}
+                {{ form.rating(class="form-select") }}
+            </div>
+            <div class="col-md-12">
+                {{ form.strengths.label(class="form-label") }}
+                {{ form.strengths(class="form-control", rows=3, placeholder="Key strengths observed...") }}
+            </div>
+            <div class="col-md-12">
+                {{ form.improvements.label(class="form-label") }}
+                {{ form.improvements(class="form-control", rows=3, placeholder="Areas that need improvement...") }}
+            </div>
+            <div class="col-md-12">
+                {{ form.comments.label(class="form-label") }}
+                {{ form.comments(class="form-control", rows=3, placeholder="Additional comments or goals...") }}
+            </div>
+        </div>
+        <hr class="my-4">
+        <div class="d-flex gap-2">
+            {{ form.submit(class="btn btn-primary") }}
+            <a href="{{ url_for('hr.performance') }}" class="btn btn-outline-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
