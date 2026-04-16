@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Expenses — Enterprise Portal{% endblock %}
+{% block page_title %}Expenses{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 style="font-weight:700;">Expense Records</h4>
+        <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">{{ expenses | length }} records</p>
+    </div>
+    <a href="{{ url_for('finance.add_expense') }}" class="btn btn-primary" id="btn-add-expense">
+        <i class="fas fa-plus me-2"></i>Add Expense
+    </a>
+</div>
+
+<div class="data-card">
+    <div class="table-responsive">
+        <table class="table" id="expenses-table">
+            <thead>
+                <tr>
+                    <th>Category</th>
+                    <th>Amount</th>
+                    <th>Date</th>
+                    <th>Description</th>
+                    <th>Submitted By</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for exp in expenses %}
+                <tr>
+                    <td class="fw-semibold">{{ exp.category }}</td>
+                    <td>₹{{ "{:,.2f}".format(exp.amount) }}</td>
+                    <td>{{ exp.date.strftime('%d %b %Y') if exp.date else '—' }}</td>
+                    <td style="max-width:200px;">{{ exp.description[:60] }}{% if exp.description|length > 60 %}…{% endif %}</td>
+                    <td>{{ exp.submitter.full_name }}</td>
+                    <td><span class="badge-status badge-{{ exp.status | lower }}">{{ exp.status }}</span></td>
+                    <td>
+                        <div class="d-flex gap-1">
+                            <a href="{{ url_for('finance.edit_expense', expense_id=exp.id) }}" class="btn-action" title="Edit">
+                                <i class="fas fa-pen-to-square"></i>
+                            </a>
+                            {% if exp.status == 'Pending' %}
+                            <form method="POST" action="{{ url_for('finance.approve_expense', expense_id=exp.id) }}" class="d-inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn-action" title="Approve" style="color:var(--success);">
+                                    <i class="fas fa-check"></i>
+                                </button>
+                            </form>
+                            <form method="POST" action="{{ url_for('finance.reject_expense', expense_id=exp.id) }}" class="d-inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn-action danger" title="Reject">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" class="text-center py-4" style="color:var(--text-secondary);">No expenses recorded</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

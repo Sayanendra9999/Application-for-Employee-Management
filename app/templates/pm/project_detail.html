@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} — Enterprise Portal{% endblock %}
+{% block page_title %}{{ project.name }}{% endblock %}
+
+{% block content %}
+<div class="mb-3 d-flex justify-content-between align-items-center">
+    <a href="{{ url_for('pm.projects') }}" class="btn btn-outline-primary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Back to Projects
+    </a>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('pm.edit_project', project_id=project.id) }}" class="btn btn-outline-primary btn-sm">
+            <i class="fas fa-pen-to-square me-1"></i>Edit Project
+        </a>
+        <form method="POST" action="{{ url_for('pm.delete_project', project_id=project.id) }}" class="d-inline"
+              onsubmit="return confirm('Delete this project and all its data?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-outline-danger btn-sm">
+                <i class="fas fa-trash me-1"></i>Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Project Info + Progress -->
+<div class="data-card mb-4">
+    <div class="card-header">
+        <h5><i class="fas fa-info-circle me-2"></i>Project Overview</h5>
+        <span class="badge-status badge-{{ project.status | lower | replace(' ', '-') }}">{{ project.status }}</span>
+    </div>
+    <div class="p-4">
+        <p>{{ project.description or 'No description provided.' }}</p>
+        <div class="row g-3 mb-3" style="font-size:0.88rem;">
+            <div class="col-auto"><strong>Created by:</strong> {{ project.creator.full_name }}</div>
+            <div class="col-auto"><strong>Start:</strong> {{ project.start_date.strftime('%d %b %Y') if project.start_date else 'TBD' }}</div>
+            <div class="col-auto"><strong>End:</strong> {{ project.end_date.strftime('%d %b %Y') if project.end_date else 'TBD' }}</div>
+            <div class="col-auto">
+                <strong>Deadline:</strong>
+                {% if project.deadline %}
+                    <span class="{% if project.is_delayed %}text-danger fw-bold{% endif %}">
+                        {{ project.deadline.strftime('%d %b %Y') }}
+                        {% if project.is_delayed %} <i class="fas fa-exclamation-circle"></i> Delayed{% endif %}
+                    </span>
+                {% else %}TBD{% endif %}
+            </div>
+        </div>
+        <!-- Progress Bar -->
+        <div class="d-flex align-items-center gap-3">
+            <strong style="font-size:0.88rem;">Progress:</strong>
+            <div class="progress flex-grow-1" style="height:10px; max-width:400px;">
+                <div class="progress-bar {% if progress == 100 %}bg-success{% elif progress > 50 %}bg-primary{% elif progress > 0 %}bg-warning{% else %}bg-secondary{% endif %}"
+                     style="width:{{ progress }}%" role="progressbar"></div>
+            </div>
+            <strong style="font-size:0.88rem;">{{ progress }}%</strong>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Members Panel -->
+    <div class="col-lg-4">
+        <div class="data-card mb-4">
+            <div class="card-header">
+                <h5><i class="fas fa-users me-2"></i>Team ({{ members | length }})</h5>
+            </div>
+            <div class="p-3">
+                {% for m in members %}
+                <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                    <div>
+                        <span class="fw-semibold">{{ m.user.full_name }}</span>
+                        <span class="badge bg-light text-dark border ms-1" style="font-size:0.68rem;">{{ m.role }}</span>
+                    </div>
+                    <form method="POST" action="{{ url_for('pm.remove_member', project_id=project.id, member_id=m.id) }}" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn-action danger" style="width:26px; height:26px;" title="Remove">
+                            <i class="fas fa-times" style="font-size:0.7rem;"></i>
+                        </button>
+                    </form>
+                </div>
+                {% else %}
+                <p class="text-center py-3" style="color:var(--text-secondary); font-size:0.85rem;">No members added</p>
+                {% endfor %}
+
+                <!-- Add Member Form -->
+                <form method="POST" action="{{ url_for('pm.add_member', project_id=project.id) }}" class="mt-3" id="form-add-member">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-2">
+                        <select name="user_id" class="form-select form-select-sm" required>
+                            <option value="">Add member...</option>
+                            {% for u in all_users %}
+                            <option value="{{ u.id }}">{{ u.full_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <select name="role" class="form-select form-select-sm" style="max-width:130px;">
+                            <option value="Developer">Developer</option>
+                            <option value="Tester">Tester</option>
+                            <option value="Designer">Designer</option>
+                            <option value="Lead">Lead</option>
+                            <option value="Observer">Observer</option>
+                        </select>
+                        <button type="submit" class="btn btn-primary btn-sm">Add</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Milestones Panel -->
+        <div class="data-card">
+            <div class="card-header">
+                <h5><i class="fas fa-flag-checkered me-2"></i>Milestones ({{ milestones | length }})</h5>
+                <a href="{{ url_for('pm.add_milestone', project_id=project.id) }}" class="btn btn-primary btn-sm">
+                    <i class="fas fa-plus me-1"></i>Add
+                </a>
+            </div>
+            <div class="p-3">
+                {% for ms in milestones %}
+                <div class="py-2 border-bottom">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <span class="fw-semibold">{{ ms.title }}</span>
+                            <br>
+                            <small class="text-muted">
+                                {% if ms.deadline %}
+                                    <span class="{% if ms.is_overdue %}text-danger{% endif %}">
+                                        {{ ms.deadline.strftime('%d %b %Y') }}
+                                        {% if ms.is_overdue %}<i class="fas fa-exclamation-circle"></i>{% endif %}
+                                    </span>
+                                {% else %}No deadline{% endif %}
+                            </small>
+                        </div>
+                        <div class="d-flex align-items-center gap-1">
+                            <span class="badge-status badge-{{ ms.status | lower | replace(' ', '-') }}" style="font-size:0.65rem;">{{ ms.status }}</span>
+                            <a href="{{ url_for('pm.edit_milestone', milestone_id=ms.id) }}" class="btn-action" style="width:24px;height:24px;" title="Edit">
+                                <i class="fas fa-pen" style="font-size:0.6rem;"></i>
+                            </a>
+                            <form method="POST" action="{{ url_for('pm.delete_milestone', milestone_id=ms.id) }}" class="d-inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn-action danger" style="width:24px;height:24px;" title="Delete">
+                                    <i class="fas fa-trash" style="font-size:0.6rem;"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-center py-3" style="color:var(--text-secondary); font-size:0.85rem;">No milestones yet</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Tasks Panel -->
+    <div class="col-lg-8">
+        <div class="data-card">
+            <div class="card-header">
+                <h5><i class="fas fa-list-check me-2"></i>Tasks ({{ tasks | length }})</h5>
+                <a href="{{ url_for('pm.add_task', project_id=project.id) }}" class="btn btn-primary btn-sm" id="btn-add-task">
+                    <i class="fas fa-plus me-1"></i>Add Task
+                </a>
+            </div>
+            <div class="table-responsive">
+                <table class="table" id="tbl-tasks">
+                    <thead>
+                        <tr>
+                            <th>Task</th>
+                            <th>Assigned To</th>
+                            <th>Priority</th>
+                            <th>Status</th>
+                            <th>Due</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for task in tasks %}
+                        <tr>
+                            <td class="fw-semibold">{{ task.title }}</td>
+                            <td>{{ task.assignee.full_name if task.assignee else '—' }}</td>
+                            <td><span class="badge-status badge-{{ task.priority | lower }}">{{ task.priority }}</span></td>
+                            <td><span class="badge-status badge-{{ task.status | lower | replace(' ', '-') }}">{{ task.status }}</span></td>
+                            <td>
+                                {% if task.due_date %}
+                                    {{ task.due_date.strftime('%d %b') }}
+                                {% else %}—{% endif %}
+                            </td>
+                            <td>
+                                <div class="d-flex gap-1">
+                                    <a href="{{ url_for('pm.edit_task', task_id=task.id) }}" class="btn-action" title="Edit">
+                                        <i class="fas fa-pen-to-square"></i>
+                                    </a>
+                                    <form method="POST" action="{{ url_for('pm.delete_task', task_id=task.id) }}" class="form-delete d-inline">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn-action danger" title="Delete">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="6" class="text-center py-4" style="color:var(--text-secondary);">No tasks yet</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Employee Tasks — Enterprise Portal{% endblock %}
+{% block page_title %}Employee Tasks{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h4 style="font-weight:700;">Tasks Assigned to Me</h4>
+    <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">{{ tasks | length }} tasks</p>
+</div>
+
+<div class="data-card">
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Task</th>
+                    <th>Project</th>
+                    <th>Priority</th>
+                    <th>Status</th>
+                    <th>Due Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for task in tasks %}
+                <tr>
+                    <td class="fw-semibold">{{ task.title }}</td>
+                    <td>
+                        <a href="{{ url_for('pm.project_detail', project_id=task.project_id) }}" class="text-decoration-none">
+                            {{ task.project.name }}
+                        </a>
+                    </td>
+                    <td><span class="badge-status badge-{{ task.priority | lower }}">{{ task.priority }}</span></td>
+                    <td><span class="badge-status badge-{{ task.status | lower | replace(' ', '') }}">{{ task.status }}</span></td>
+                    <td>{{ task.due_date.strftime('%d %b %Y') if task.due_date else '—' }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="text-center py-4" style="color:var(--text-secondary);">No tasks assigned to you</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

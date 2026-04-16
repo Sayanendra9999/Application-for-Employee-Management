@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Employees — Enterprise Portal{% endblock %}
+{% block page_title %}Employees{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 style="font-weight:700;">Employee Directory</h4>
+        <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">{{ employees | length }} employees found</p>
+    </div>
+    <a href="{{ url_for('hr.add_employee') }}" class="btn btn-primary">
+        <i class="fas fa-plus me-2"></i>Add Employee
+    </a>
+</div>
+
+<!-- Filters -->
+<div class="data-card mb-4" style="padding:16px 20px;">
+    <form method="GET" class="row g-2 align-items-end">
+        <div class="col-md-4">
+            <label class="form-label" style="font-size:0.8rem;">Department</label>
+            <select name="department" class="form-select form-select-sm">
+                <option value="">All Departments</option>
+                {% for dept in departments %}
+                <option value="{{ dept.id }}" {% if selected_dept == dept.id %}selected{% endif %}>{{ dept.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-4">
+            <label class="form-label" style="font-size:0.8rem;">Search</label>
+            <input type="text" name="search" class="form-control form-control-sm" placeholder="Name or code..." value="{{ search or '' }}">
+        </div>
+        <div class="col-md-2">
+            <button type="submit" class="btn btn-primary btn-sm w-100"><i class="fas fa-search me-1"></i>Filter</button>
+        </div>
+        {% if selected_dept or search %}
+        <div class="col-md-2">
+            <a href="{{ url_for('hr.employees') }}" class="btn btn-outline-secondary btn-sm w-100">Clear</a>
+        </div>
+        {% endif %}
+    </form>
+</div>
+
+<div class="data-card">
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Code</th>
+                    <th>Name</th>
+                    <th>Department</th>
+                    <th>Designation</th>
+                    <th>Joined</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for emp in employees %}
+                <tr>
+                    <td><code>{{ emp.emp_code }}</code></td>
+                    <td class="fw-semibold">{{ emp.user.full_name }}</td>
+                    <td><span class="badge bg-light text-dark border" style="font-size:0.75rem;">{{ emp.department_name }}</span></td>
+                    <td style="font-size:0.88rem;">{{ emp.designation_title }}</td>
+                    <td>{{ emp.date_of_joining.strftime('%d %b %Y') if emp.date_of_joining else '—' }}</td>
+                    <td>
+                        <div class="d-flex gap-1">
+                            <a href="{{ url_for('hr.employee_detail', emp_id=emp.id) }}" class="btn-action" title="View">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                            <a href="{{ url_for('hr.edit_employee', emp_id=emp.id) }}" class="btn-action" title="Edit">
+                                <i class="fas fa-pen-to-square"></i>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="text-center py-4" style="color:var(--text-secondary);">No employees found</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

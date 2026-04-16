@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Assign Modules — {{ user.full_name }} — Enterprise Portal{% endblock %}
+{% block page_title %}Assign Module Permissions{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="{{ url_for('admin.users') }}" class="btn btn-outline-primary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Back to Users
+    </a>
+</div>
+
+<div class="form-card" style="max-width:720px;">
+    <div class="mb-4">
+        <h5 class="fw-bold mb-1">{{ user.full_name }}</h5>
+        <p style="color:var(--text-secondary); font-size:0.88rem; margin:0;">
+            <code>@{{ user.username }}</code> · {{ user.email }}
+        </p>
+    </div>
+
+    <form method="POST" novalidate>
+        {{ form.hidden_tag() }}
+
+        <p class="fw-semibold mb-3" style="font-size:0.9rem;">Select modules this user can access:</p>
+
+        <div class="module-checkbox-list">
+            {% for module in modules %}
+            <label class="module-checkbox-item">
+                <input type="checkbox" name="modules" value="{{ module.id }}"
+                       {% if module.id in form.modules.data %}checked{% endif %}
+                       style="width:18px; height:18px; accent-color:var(--primary);">
+                <span>
+                    <i class="{{ module.icon }} me-1" style="color:var(--primary);"></i>
+                    {{ module.name }}
+                </span>
+            </label>
+            {% endfor %}
+        </div>
+
+        <hr class="my-4">
+        <div class="d-flex gap-2">
+            {{ form.submit(class="btn btn-primary") }}
+            <a href="{{ url_for('admin.users') }}" class="btn btn-outline-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

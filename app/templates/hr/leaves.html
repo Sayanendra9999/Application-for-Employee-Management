@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Leave Requests — Enterprise Portal{% endblock %}
+{% block page_title %}Leave Requests{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 style="font-weight:700;">Leave Requests</h4>
+        <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">{{ leaves | length }} requests</p>
+    </div>
+    <a href="{{ url_for('hr.leave_balances') }}" class="btn btn-outline-primary btn-sm">
+        <i class="fas fa-scale-balanced me-1"></i>View Balances
+    </a>
+</div>
+
+<!-- Filter -->
+<div class="data-card mb-4" style="padding:12px 20px;">
+    <form method="GET" class="d-flex gap-2 align-items-center">
+        <label style="font-size:0.82rem; font-weight:600; white-space:nowrap;">Status:</label>
+        <select name="status" class="form-select form-select-sm" style="max-width:180px;" onchange="this.form.submit()">
+            <option value="">All</option>
+            {% for s in ['Pending','Approved','Rejected'] %}
+            <option value="{{ s }}" {% if selected_status == s %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+        </select>
+        {% if selected_status %}
+        <a href="{{ url_for('hr.leaves') }}" class="btn btn-outline-secondary btn-sm">Clear</a>
+        {% endif %}
+    </form>
+</div>
+
+<div class="data-card">
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Employee</th>
+                    <th>Type</th>
+                    <th>From</th>
+                    <th>To</th>
+                    <th>Days</th>
+                    <th>Reason</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for leave in leaves %}
+                <tr>
+                    <td class="fw-semibold">{{ leave.employee.user.full_name }}</td>
+                    <td>{{ leave.leave_type }}</td>
+                    <td>{{ leave.start_date.strftime('%d %b %Y') }}</td>
+                    <td>{{ leave.end_date.strftime('%d %b %Y') }}</td>
+                    <td><strong>{{ leave.total_days or leave.calc_days() }}</strong></td>
+                    <td style="font-size:0.85rem; color:var(--text-secondary); max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                        {{ leave.reason or '—' }}
+                    </td>
+                    <td>
+                        {% if leave.status == 'Pending' %}
+                        <span class="badge-status" style="background:#fef3c7; color:#92400e;">Pending</span>
+                        {% elif leave.status == 'Approved' %}
+                        <span class="badge-status badge-approved">Approved</span>
+                        {% elif leave.status == 'Rejected' %}
+                        <span class="badge-status badge-rejected">Rejected</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if leave.status == 'Pending' %}
+                        <form method="POST" action="{{ url_for('hr.leave_action', leave_id=leave.id) }}" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="status" value="Approved">
+                            <button type="submit" class="btn-action" title="Approve" style="color:var(--success);">
+                                <i class="fas fa-check"></i>
+                            </button>
+                        </form>
+                        <form method="POST" action="{{ url_for('hr.leave_action', leave_id=leave.id) }}" class="d-inline" onsubmit="var r=prompt('Rejection reason (optional):'); if(r!==null){this.querySelector('[name=rejection_reason]').value=r; return true;} return false;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="status" value="Rejected">
+                            <input type="hidden" name="rejection_reason" value="">
+                            <button type="submit" class="btn-action danger" title="Reject">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </form>
+                        {% else %}
+                        <span style="font-size:0.75rem; color:var(--text-secondary);">
+                            {% if leave.approver %}by {{ leave.approver.full_name }}{% endif %}
+                        </span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="text-center py-4" style="color:var(--text-secondary);">No leave requests found</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

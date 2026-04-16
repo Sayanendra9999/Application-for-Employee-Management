@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — Enterprise Portal{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="{{ url_for('finance.salaries') }}" class="btn btn-outline-primary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Back to Salary Records
+    </a>
+</div>
+
+<div class="form-card">
+    <form method="POST" novalidate>
+        {{ form.hidden_tag() }}
+
+        <div class="mb-3">
+            <label for="employee_id" class="form-label fw-semibold">Employee</label>
+            <select name="employee_id" id="employee_id" class="form-select" required>
+                <option value="">-- Select Employee --</option>
+                {% for emp in employees %}
+                <option value="{{ emp.id }}">{{ emp.user.full_name }} ({{ emp.emp_code }})</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="row g-3">
+            <div class="col-md-6">
+                {{ form.month.label(class="form-label") }}
+                {{ form.month(class="form-select") }}
+            </div>
+            <div class="col-md-6">
+                {{ form.year.label(class="form-label") }}
+                {{ form.year(class="form-control", placeholder="2026", value="2026") }}
+            </div>
+            <div class="col-md-4">
+                {{ form.basic.label(class="form-label") }}
+                {{ form.basic(class="form-control", placeholder="40000", id="basic") }}
+            </div>
+            <div class="col-md-4">
+                {{ form.hra.label(class="form-label") }}
+                {{ form.hra(class="form-control", placeholder="15000", id="hra") }}
+            </div>
+            <div class="col-md-4">
+                {{ form.deductions.label(class="form-label") }}
+                {{ form.deductions(class="form-control", placeholder="5000", id="deductions") }}
+            </div>
+        </div>
+
+        <div class="mt-3 p-3" style="background:#f8fafc; border-radius:8px;">
+            <span style="font-size:0.85rem; color:var(--text-secondary);">Net Salary:</span>
+            <span id="netSalaryDisplay" class="fw-bold ms-2" style="font-size:1.1rem; color:var(--primary);">₹0.00</span>
+        </div>
+
+        <div class="row g-3 mt-1">
+            <div class="col-md-6">
+                {{ form.status.label(class="form-label") }}
+                {{ form.status(class="form-select") }}
+            </div>
+        </div>
+
+        <hr class="my-4">
+        <div class="d-flex gap-2">
+            {{ form.submit(class="btn btn-primary") }}
+            <a href="{{ url_for('finance.salaries') }}" class="btn btn-outline-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

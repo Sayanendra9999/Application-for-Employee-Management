@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}Finance Dashboard — Enterprise Portal{% endblock %}
+{% block page_title %}Finance Dashboard{% endblock %}
+
+{% block content %}
+<div class="row g-4 mb-4">
+    <div class="col-sm-6 col-xl-4">
+        <div class="stat-card green">
+            <div class="stat-icon"><i class="fas fa-indian-rupee-sign"></i></div>
+            <div class="stat-value">₹{{ "{:,.0f}".format(total_invoiced) }}</div>
+            <div class="stat-label">Total Invoiced</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-4">
+        <div class="stat-card pink">
+            <div class="stat-icon"><i class="fas fa-file-invoice"></i></div>
+            <div class="stat-value">{{ unpaid_invoices }}</div>
+            <div class="stat-label">Unpaid Invoices</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-4">
+        <div class="stat-card orange">
+            <div class="stat-icon"><i class="fas fa-receipt"></i></div>
+            <div class="stat-value">₹{{ "{:,.0f}".format(total_expenses) }}</div>
+            <div class="stat-label">Total Expenses</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-4">
+        <div class="stat-card blue">
+            <div class="stat-icon"><i class="fas fa-clock"></i></div>
+            <div class="stat-value">{{ pending_expenses }}</div>
+            <div class="stat-label">Pending Expenses</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-4">
+        <div class="stat-card teal">
+            <div class="stat-icon"><i class="fas fa-wallet"></i></div>
+            <div class="stat-value">₹{{ "{:,.0f}".format(total_salary_paid) }}</div>
+            <div class="stat-label">Salary Paid Out</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-4">
+        <div class="stat-card purple">
+            <div class="stat-icon"><i class="fas fa-chart-pie"></i></div>
+            <div class="stat-value">₹{{ "{:,.0f}".format(total_invoiced - total_expenses) }}</div>
+            <div class="stat-label">Net Revenue</div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-6">
+        <div class="data-card">
+            <div class="card-header">
+                <h5><i class="fas fa-receipt me-2"></i>Recent Expenses</h5>
+                <a href="{{ url_for('finance.expenses') }}" class="btn btn-outline-primary btn-sm">View All</a>
+            </div>
+            <div class="table-responsive">
+                <table class="table">
+                    <thead><tr><th>Category</th><th>Amount</th><th>Status</th></tr></thead>
+                    <tbody>
+                        {% for exp in recent_expenses %}
+                        <tr>
+                            <td class="fw-semibold">{{ exp.category }}</td>
+                            <td>₹{{ "{:,.0f}".format(exp.amount) }}</td>
+                            <td><span class="badge-status badge-{{ exp.status | lower }}">{{ exp.status }}</span></td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="3" class="text-center py-3" style="color:var(--text-secondary);">No expenses</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="data-card">
+            <div class="card-header">
+                <h5><i class="fas fa-file-invoice me-2"></i>Recent Invoices</h5>
+                <a href="{{ url_for('finance.invoices') }}" class="btn btn-outline-primary btn-sm">View All</a>
+            </div>
+            <div class="table-responsive">
+                <table class="table">
+                    <thead><tr><th>Invoice</th><th>Client</th><th>Amount</th><th>Status</th></tr></thead>
+                    <tbody>
+                        {% for inv in recent_invoices %}
+                        <tr>
+                            <td><code>{{ inv.invoice_number }}</code></td>
+                            <td class="fw-semibold">{{ inv.client_name }}</td>
+                            <td>₹{{ "{:,.0f}".format(inv.amount) }}</td>
+                            <td><span class="badge-status badge-{{ inv.status | lower }}">{{ inv.status }}</span></td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="4" class="text-center py-3" style="color:var(--text-secondary);">No invoices</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Links -->
+<div class="row g-4 mt-2">
+    <div class="col-12">
+        <div class="data-card">
+            <div class="card-header">
+                <h5><i class="fas fa-link me-2"></i>Quick Actions</h5>
+            </div>
+            <div class="p-4">
+                <div class="d-flex flex-wrap gap-2">
+                    <a href="{{ url_for('finance.add_expense') }}" class="btn btn-outline-primary">
+                        <i class="fas fa-plus me-1"></i>New Expense
+                    </a>
+                    <a href="{{ url_for('finance.add_invoice') }}" class="btn btn-outline-primary">
+                        <i class="fas fa-plus me-1"></i>New Invoice
+                    </a>
+                    <a href="{{ url_for('finance.salaries') }}" class="btn btn-outline-primary">
+                        <i class="fas fa-money-check me-1"></i>Salary Records
+                    </a>
+                    <a href="{{ url_for('finance.add_salary') }}" class="btn btn-outline-primary">
+                        <i class="fas fa-plus me-1"></i>Add Salary Record
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

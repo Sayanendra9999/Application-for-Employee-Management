@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Attendance Records — Enterprise Portal{% endblock %}
+{% block page_title %}Attendance Records{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 style="font-weight:700;">Attendance Records</h4>
+        <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">{{ records | length }} records shown</p>
+    </div>
+    <a href="{{ url_for('hr.attendance_checkin') }}" class="btn btn-primary">
+        <i class="fas fa-fingerprint me-2"></i>Check-In / Out
+    </a>
+</div>
+
+<!-- Filters -->
+<div class="data-card mb-4" style="padding:16px 20px;">
+    <form method="GET" class="row g-2 align-items-end">
+        <div class="col-md-3">
+            <label class="form-label" style="font-size:0.8rem;">Department</label>
+            <select name="department" class="form-select form-select-sm">
+                <option value="">All</option>
+                {% for dept in departments %}
+                <option value="{{ dept.id }}" {% if selected_dept == dept.id %}selected{% endif %}>{{ dept.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label" style="font-size:0.8rem;">Status</label>
+            <select name="status" class="form-select form-select-sm">
+                <option value="">All</option>
+                {% for s in ['Present','Late','Absent','Half-Day'] %}
+                <option value="{{ s }}" {% if selected_status == s %}selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label" style="font-size:0.8rem;">From</label>
+            <input type="date" name="date_from" class="form-control form-control-sm" value="{{ date_from }}">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label" style="font-size:0.8rem;">To</label>
+            <input type="date" name="date_to" class="form-control form-control-sm" value="{{ date_to }}">
+        </div>
+        <div class="col-md-2">
+            <button type="submit" class="btn btn-primary btn-sm w-100"><i class="fas fa-search me-1"></i>Filter</button>
+        </div>
+        <div class="col-md-1">
+            <a href="{{ url_for('hr.attendance') }}" class="btn btn-outline-secondary btn-sm w-100">Clear</a>
+        </div>
+    </form>
+</div>
+
+<!-- Rules banner -->
+<div style="background:var(--bg-card); border:1px solid var(--border-color); border-radius:8px; padding:10px 16px; margin-bottom:16px; font-size:0.78rem; color:var(--text-secondary);">
+    <i class="fas fa-gear me-1"></i>
+    Rules: {{ rules.work_start }}–{{ rules.work_end }} | Late after +{{ rules.late_threshold_mins }}min | Half-day ≥ {{ rules.half_day_hours }}h
+</div>
+
+<div class="data-card">
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Employee</th>
+                    <th>Department</th>
+                    <th>Check In</th>
+                    <th>Check Out</th>
+                    <th>Hours</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in records %}
+                <tr>
+                    <td>{{ r.date.strftime('%d %b %Y') }}</td>
+                    <td class="fw-semibold">{{ r.employee.user.full_name }}</td>
+                    <td><span class="badge bg-light text-dark border" style="font-size:0.7rem;">{{ r.employee.department_name }}</span></td>
+                    <td>{{ r.check_in or '—' }}</td>
+                    <td>{{ r.check_out or '—' }}</td>
+                    <td>{% if r.working_hours %}{{ '%.1f' % r.working_hours }}h{% else %}—{% endif %}</td>
+                    <td>
+                        {% if r.status == 'Present' %}
+                        <span class="badge-status badge-approved">Present</span>
+                        {% elif r.status == 'Late' %}
+                        <span class="badge-status badge-planning">Late</span>
+                        {% elif r.status == 'Absent' %}
+                        <span class="badge-status badge-rejected">Absent</span>
+                        {% elif r.status == 'Half-Day' %}
+                        <span class="badge-status" style="background:#fef3c7; color:#92400e;">Half-Day</span>
+                        {% else %}
+                        <span class="badge-status">{{ r.status }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" class="text-center py-4" style="color:var(--text-secondary);">No attendance records found</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

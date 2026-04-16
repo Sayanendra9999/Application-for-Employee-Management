@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Manage Users — Enterprise Portal{% endblock %}
+{% block page_title %}Manage Users{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 style="font-weight:700;">All Users</h4>
+        <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">{{ users | length }} users registered</p>
+    </div>
+    <a href="{{ url_for('admin.add_user') }}" class="btn btn-primary" id="btn-add-user">
+        <i class="fas fa-plus me-2"></i>Add User
+    </a>
+</div>
+
+{% if new_user_info %}
+<div style="background:linear-gradient(135deg,#f0fdf4,#ecfdf5); border:2px solid #86efac; border-radius:14px; padding:24px; margin-bottom:24px; position:relative;">
+    <div class="d-flex align-items-start gap-3">
+        <div style="width:44px; height:44px; background:#10b981; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+            <i class="fas fa-user-check" style="color:#fff; font-size:1.1rem;"></i>
+        </div>
+        <div style="flex:1;">
+            <h6 style="font-weight:700; margin-bottom:4px; color:#166534;">User Credentials Generated</h6>
+            <p style="font-size:0.82rem; color:#15803d; margin-bottom:14px;">
+                Share these credentials securely with the user. The password will not be shown again.
+            </p>
+            <div style="background:#fff; border-radius:10px; padding:16px; border:1px solid #bbf7d0;">
+                <div class="d-flex gap-4 flex-wrap">
+                    <div>
+                        <div style="font-size:0.7rem; text-transform:uppercase; font-weight:600; color:#64748b; letter-spacing:0.05em;">Full Name</div>
+                        <div style="font-weight:600; font-size:0.95rem;">{{ new_user_info.full_name }}</div>
+                    </div>
+                    <div>
+                        <div style="font-size:0.7rem; text-transform:uppercase; font-weight:600; color:#64748b; letter-spacing:0.05em;">Username</div>
+                        <div style="font-weight:600; font-size:0.95rem;"><code>{{ new_user_info.username }}</code></div>
+                    </div>
+                    <div>
+                        <div style="font-size:0.7rem; text-transform:uppercase; font-weight:600; color:#64748b; letter-spacing:0.05em;">Temporary Password</div>
+                        <div class="d-flex align-items-center gap-2">
+                            <code style="font-size:1.1rem; font-weight:700; color:#dc2626; background:#fef2f2; padding:4px 12px; border-radius:6px;">{{ new_user_info.password }}</code>
+                            <button class="btn btn-sm btn-outline-primary btn-copy" data-copy="{{ new_user_info.password }}" type="button" style="font-size:0.75rem;">
+                                <i class="fas fa-copy me-1"></i>Copy
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-2" style="font-size:0.75rem; color:#94a3b8;">
+                    <i class="fas fa-info-circle me-1"></i>User will be asked to change this password on first login.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="data-card">
+    <div class="table-responsive">
+        <table class="table" id="users-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Username</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Modules</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr>
+                    <td class="fw-semibold">{{ user.full_name }}</td>
+                    <td><code>{{ user.username }}</code></td>
+                    <td>{{ user.email }}</td>
+                    <td>
+                        {% if user.is_admin %}
+                        <span class="badge-status badge-approved">Admin</span>
+                        {% else %}
+                        <span class="badge-status badge-planning">User</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% for mod in user.modules %}
+                        <span class="badge bg-light text-dark border" style="font-size:0.7rem; margin:1px;">{{ mod.name }}</span>
+                        {% endfor %}
+                        {% if not user.modules %}<span style="color:var(--text-secondary); font-size:0.8rem;">None</span>{% endif %}
+                    </td>
+                    <td>
+                        {% if user.is_active_user %}
+                        <span class="badge-status badge-approved">Active</span>
+                        {% else %}
+                        <span class="badge-status badge-rejected">Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="d-flex gap-1">
+                            <a href="{{ url_for('admin.edit_user', user_id=user.id) }}" class="btn-action" title="Edit">
+                                <i class="fas fa-pen-to-square"></i>
+                            </a>
+                            <a href="{{ url_for('admin.assign_modules', user_id=user.id) }}" class="btn-action" title="Permissions">
+                                <i class="fas fa-key"></i>
+                            </a>
+                            <form method="POST" action="{{ url_for('admin.reset_password', user_id=user.id) }}" class="d-inline" onsubmit="return confirm('Generate a new temporary password for {{ user.username }}?')">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn-action" title="Reset Password" style="color:#f59e0b;">
+                                    <i class="fas fa-rotate-right"></i>
+                                </button>
+                            </form>
+                            {% if not user.is_admin %}
+                            <form method="POST" action="{{ url_for('admin.delete_user', user_id=user.id) }}" class="form-delete d-inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn-action danger" title="Deactivate">
+                                    <i class="fas fa-user-slash"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

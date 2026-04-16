@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Salary Records — Enterprise Portal{% endblock %}
+{% block page_title %}Salary Records{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 style="font-weight:700;">Salary Records</h4>
+        <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">{{ records | length }} records</p>
+    </div>
+    <a href="{{ url_for('finance.add_salary') }}" class="btn btn-primary" id="btn-add-salary">
+        <i class="fas fa-plus me-2"></i>Add Record
+    </a>
+</div>
+
+<div class="data-card">
+    <div class="table-responsive">
+        <table class="table" id="salary-table">
+            <thead>
+                <tr>
+                    <th>Employee</th>
+                    <th>Month</th>
+                    <th>Year</th>
+                    <th>Basic</th>
+                    <th>HRA</th>
+                    <th>Deductions</th>
+                    <th>Net Salary</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rec in records %}
+                <tr>
+                    <td class="fw-semibold">{{ rec.employee.user.full_name }}</td>
+                    <td>{{ rec.month }}</td>
+                    <td>{{ rec.year }}</td>
+                    <td>₹{{ "{:,.0f}".format(rec.basic) }}</td>
+                    <td>₹{{ "{:,.0f}".format(rec.hra) }}</td>
+                    <td>₹{{ "{:,.0f}".format(rec.deductions) }}</td>
+                    <td class="fw-bold">₹{{ "{:,.0f}".format(rec.net_salary) }}</td>
+                    <td><span class="badge-status badge-{{ rec.status | lower }}">{{ rec.status }}</span></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="text-center py-4" style="color:var(--text-secondary);">No salary records</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

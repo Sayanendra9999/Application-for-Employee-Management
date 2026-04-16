@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}My Profile — Enterprise Portal{% endblock %}
+{% block page_title %}My Profile{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="data-card">
+            <div class="p-4 text-center">
+                <div class="user-avatar mx-auto mb-3" style="width:80px; height:80px; font-size:2rem; border-radius:20px;">
+                    {{ current_user.full_name[0] | upper }}
+                </div>
+                <h5 class="fw-bold mb-1">{{ current_user.full_name }}</h5>
+                <p style="color:var(--text-secondary); font-size:0.88rem; margin:0;">@{{ current_user.username }}</p>
+                <p style="color:var(--text-secondary); font-size:0.85rem;">{{ current_user.email }}</p>
+
+                {% if employee %}
+                <hr>
+                <div style="font-size:0.85rem; text-align:left;">
+                    <div class="mb-2"><strong>Employee Code:</strong> {{ employee.emp_code }}</div>
+                    <div class="mb-2"><strong>Department:</strong> {{ employee.department or '—' }}</div>
+                    <div class="mb-2"><strong>Designation:</strong> {{ employee.designation or '—' }}</div>
+                    <div class="mb-2"><strong>Joined:</strong> {{ employee.date_of_joining.strftime('%d %b %Y') if employee.date_of_joining else '—' }}</div>
+                    <div class="mb-2"><strong>PAN:</strong> {{ employee.pan_number or '—' }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <div class="form-card" style="max-width:100%;">
+            <h5 class="fw-bold mb-4">Update Profile</h5>
+            <form method="POST" novalidate>
+                {{ form.hidden_tag() }}
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        {{ form.full_name.label(class="form-label") }}
+                        {{ form.full_name(class="form-control") }}
+                    </div>
+                    <div class="col-md-6">
+                        {{ form.phone.label(class="form-label") }}
+                        {{ form.phone(class="form-control", placeholder="+91 98765 43210") }}
+                    </div>
+                </div>
+
+                <hr class="my-4">
+                {{ form.submit(class="btn btn-primary") }}
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

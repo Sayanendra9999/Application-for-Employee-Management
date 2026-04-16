@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}Project Management — Enterprise Portal{% endblock %}
+{% block page_title %}Project Management{% endblock %}
+
+{% block content %}
+<!-- Notification Banner -->
+{% if unread_notifications %}
+<div class="alert alert-info alert-dismissible fade show d-flex align-items-center mb-4" role="alert" id="pm-notif-banner">
+    <i class="fas fa-bell me-2"></i>
+    <span>You have <strong>{{ unread_notifications|length }}</strong> unread notification{{ 's' if unread_notifications|length > 1 else '' }}.</span>
+    <a href="{{ url_for('pm.notifications') }}" class="btn btn-sm btn-outline-primary ms-3">View All</a>
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+<!-- Stats Row 1: Projects -->
+<div class="row g-4 mb-4">
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card purple" id="stat-total-projects">
+            <div class="stat-icon"><i class="fas fa-folder-open"></i></div>
+            <div class="stat-value">{{ total_projects }}</div>
+            <div class="stat-label">Total Projects</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card green" id="stat-active-projects">
+            <div class="stat-icon"><i class="fas fa-bolt"></i></div>
+            <div class="stat-value">{{ active_projects }}</div>
+            <div class="stat-label">Active Projects</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card teal" id="stat-completed-projects">
+            <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
+            <div class="stat-value">{{ completed_projects }}</div>
+            <div class="stat-label">Completed</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card orange" id="stat-onhold-projects">
+            <div class="stat-icon"><i class="fas fa-pause-circle"></i></div>
+            <div class="stat-value">{{ on_hold_projects }}</div>
+            <div class="stat-label">On Hold</div>
+        </div>
+    </div>
+</div>
+
+<!-- Stats Row 2: Tasks & Milestones -->
+<div class="row g-4 mb-4">
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card blue" id="stat-pending-tasks">
+            <div class="stat-icon"><i class="fas fa-clock"></i></div>
+            <div class="stat-value">{{ pending_tasks }}</div>
+            <div class="stat-label">Pending Tasks</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card teal" id="stat-done-tasks">
+            <div class="stat-icon"><i class="fas fa-check-double"></i></div>
+            <div class="stat-value">{{ tasks_done }}</div>
+            <div class="stat-label">Tasks Completed</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card pink" id="stat-overdue-tasks">
+            <div class="stat-icon"><i class="fas fa-exclamation-triangle"></i></div>
+            <div class="stat-value">{{ overdue_tasks }}</div>
+            <div class="stat-label">Overdue Tasks</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card purple" id="stat-milestones">
+            <div class="stat-icon"><i class="fas fa-flag-checkered"></i></div>
+            <div class="stat-value">{{ completed_milestones }}/{{ total_milestones }}</div>
+            <div class="stat-label">Milestones Done</div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Projects with Progress -->
+<div class="data-card">
+    <div class="card-header">
+        <h5><i class="fas fa-clock-rotate-left me-2"></i>Recent Projects</h5>
+        <a href="{{ url_for('pm.projects') }}" class="btn btn-outline-primary btn-sm">View All</a>
+    </div>
+    <div class="table-responsive">
+        <table class="table" id="tbl-recent-projects">
+            <thead>
+                <tr>
+                    <th>Project</th>
+                    <th>Status</th>
+                    <th>Progress</th>
+                    <th>Deadline</th>
+                    <th>Created By</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in recent_projects %}
+                <tr>
+                    <td>
+                        <a href="{{ url_for('pm.project_detail', project_id=p.id) }}" class="fw-semibold text-decoration-none">
+                            {{ p.name }}
+                        </a>
+                    </td>
+                    <td><span class="badge-status badge-{{ p.status | lower | replace(' ', '-') }}">{{ p.status }}</span></td>
+                    <td>
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="progress" style="width:80px; height:6px;">
+                                <div class="progress-bar {% if p.progress == 100 %}bg-success{% elif p.progress > 50 %}bg-primary{% elif p.progress > 0 %}bg-warning{% else %}bg-secondary{% endif %}"
+                                     style="width:{{ p.progress }}%" role="progressbar"></div>
+                            </div>
+                            <small class="text-muted">{{ p.progress }}%</small>
+                        </div>
+                    </td>
+                    <td>
+                        {% if p.deadline %}
+                            <span class="{% if p.is_delayed %}text-danger fw-bold{% endif %}">
+                                {{ p.deadline.strftime('%d %b %Y') }}
+                                {% if p.is_delayed %}<i class="fas fa-exclamation-circle ms-1"></i>{% endif %}
+                            </span>
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
+                    <td>{{ p.creator.full_name }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="text-center py-4" style="color:var(--text-secondary);">No projects yet</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Leave Balances — Enterprise Portal{% endblock %}
+{% block page_title %}Leave Balances{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 style="font-weight:700;">Leave Balances — {{ year }}</h4>
+        <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">Based on Admin-configured leave policies</p>
+    </div>
+    <form method="GET" class="d-flex gap-2 align-items-center">
+        <label style="font-size:0.82rem; font-weight:600;">Year:</label>
+        <input type="number" name="year" class="form-control form-control-sm" value="{{ year }}" style="width:90px;" min="2020" max="2030">
+        <button type="submit" class="btn btn-primary btn-sm">Go</button>
+    </form>
+</div>
+
+<div class="data-card">
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Employee</th>
+                    <th>Department</th>
+                    {% for p in policies %}
+                    <th style="text-align:center;">
+                        <div style="font-size:0.78rem;">{{ p.leave_type }}</div>
+                        <div style="font-size:0.65rem; color:var(--text-secondary);">{{ p.total_days }}d/yr</div>
+                    </th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in balance_data %}
+                <tr>
+                    <td class="fw-semibold">{{ row.employee.user.full_name }}</td>
+                    <td><span class="badge bg-light text-dark border" style="font-size:0.7rem;">{{ row.employee.department_name }}</span></td>
+                    {% for p in policies %}
+                    {% set bal = row.balances.get(p.leave_type) %}
+                    <td style="text-align:center;">
+                        {% if bal %}
+                        <div style="font-size:1rem; font-weight:700; color:{% if bal.remaining > 5 %}var(--success){% elif bal.remaining > 0 %}#f59e0b{% else %}var(--danger){% endif %};">
+                            {{ bal.remaining }}
+                        </div>
+                        <div style="font-size:0.65rem; color:var(--text-secondary);">{{ bal.used }}/{{ bal.total_allocated }} used</div>
+                        {% else %}
+                        <span style="color:var(--text-secondary);">—</span>
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% else %}
+                <tr><td colspan="{{ policies|length + 2 }}" class="text-center py-4" style="color:var(--text-secondary);">No employee data</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

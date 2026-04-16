@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — Enterprise Portal{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="{{ url_for('hr.employees') }}" class="btn btn-outline-primary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Back to Employees
+    </a>
+</div>
+
+<div class="form-card">
+    <form method="POST" novalidate>
+        {{ form.hidden_tag() }}
+
+        {% if users is defined and users %}
+        <div class="mb-3">
+            <label for="user_id" class="form-label fw-semibold">Link to User Account</label>
+            <select name="user_id" id="user_id" class="form-select" required>
+                <option value="">-- Select User --</option>
+                {% for u in users %}
+                <option value="{{ u.id }}">{{ u.full_name }} ({{ u.username }})</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
+
+        <div class="row g-3">
+            <div class="col-md-6">
+                {{ form.emp_code.label(class="form-label") }}
+                {{ form.emp_code(class="form-control", placeholder="EMP001") }}
+            </div>
+            <div class="col-md-6">
+                {{ form.department_id.label(class="form-label") }}
+                {{ form.department_id(class="form-select", id="department_id") }}
+                <small class="text-muted">Configured by Admin</small>
+            </div>
+            <div class="col-md-6">
+                {{ form.designation_id.label(class="form-label") }}
+                {{ form.designation_id(class="form-select", id="designation_id") }}
+                <small class="text-muted">Configured by Admin</small>
+            </div>
+            <div class="col-md-6">
+                {{ form.date_of_joining.label(class="form-label") }}
+                {{ form.date_of_joining(class="form-control", type="date") }}
+            </div>
+            <div class="col-md-6">
+                {{ form.salary.label(class="form-label") }}
+                {{ form.salary(class="form-control", placeholder="50000") }}
+            </div>
+            <div class="col-md-6">
+                {{ form.bank_account.label(class="form-label") }}
+                {{ form.bank_account(class="form-control", placeholder="XXXX-XXXX-1234") }}
+            </div>
+            <div class="col-md-6">
+                {{ form.pan_number.label(class="form-label") }}
+                {{ form.pan_number(class="form-control", placeholder="ABCDE1234F") }}
+            </div>
+        </div>
+
+        <hr class="my-4">
+        <div class="d-flex gap-2">
+            {{ form.submit(class="btn btn-primary") }}
+            <a href="{{ url_for('hr.employees') }}" class="btn btn-outline-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+
+<script>
+// Dynamic designation dropdown based on department selection
+document.addEventListener('DOMContentLoaded', function() {
+    var deptSel = document.getElementById('department_id');
+    var desigSel = document.getElementById('designation_id');
+    if (!deptSel || !desigSel) return;
+
+    deptSel.addEventListener('change', function() {
+        var deptId = this.value;
+        if (!deptId || deptId === '0') {
+            desigSel.innerHTML = '<option value="0">— Select Designation —</option>';
+            return;
+        }
+        fetch('/hr/api/designations/' + deptId)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var html = '<option value="0">— Select Designation —</option>';
+                data.forEach(function(d) {
+                    html += '<option value="' + d.id + '">' + d.title + '</option>';
+                });
+                desigSel.innerHTML = html;
+            });
+    });
+});
+</script>
+{% endblock %}

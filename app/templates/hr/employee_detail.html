@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}{{ employee.user.full_name }} — Enterprise Portal{% endblock %}
+{% block page_title %}Employee Profile{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="{{ url_for('hr.employees') }}" class="btn btn-outline-primary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Back to Employees
+    </a>
+</div>
+
+<!-- Employee Card -->
+<div class="data-card mb-4">
+    <div class="p-4">
+        <div class="d-flex align-items-start gap-4 flex-wrap">
+            <div style="width:72px; height:72px; background:linear-gradient(135deg, var(--primary), var(--primary-dark)); border-radius:14px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                <span style="color:#fff; font-size:1.5rem; font-weight:700;">{{ employee.user.full_name[:2] | upper }}</span>
+            </div>
+            <div style="flex:1;">
+                <h4 style="font-weight:700; margin-bottom:4px;">{{ employee.user.full_name }}</h4>
+                <p style="color:var(--text-secondary); margin-bottom:2px;">{{ employee.designation_title }} — {{ employee.department_name }}</p>
+                <p style="color:var(--text-secondary); font-size:0.82rem; margin:0;">
+                    <code>{{ employee.emp_code }}</code> · {{ employee.user.email }} · {{ employee.user.phone or 'No phone' }}
+                </p>
+            </div>
+            <a href="{{ url_for('hr.edit_employee', emp_id=employee.id) }}" class="btn btn-outline-primary btn-sm">
+                <i class="fas fa-pen-to-square me-1"></i>Edit
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Details -->
+    <div class="col-lg-4">
+        <div class="data-card">
+            <div class="card-header"><h5><i class="fas fa-info-circle me-2"></i>Details</h5></div>
+            <div class="p-4" style="font-size:0.88rem;">
+                <div class="mb-3">
+                    <div style="color:var(--text-secondary); font-size:0.75rem; text-transform:uppercase; font-weight:600;">Joined</div>
+                    <div class="fw-semibold">{{ employee.date_of_joining.strftime('%d %b %Y') if employee.date_of_joining else '—' }}</div>
+                </div>
+                <div class="mb-3">
+                    <div style="color:var(--text-secondary); font-size:0.75rem; text-transform:uppercase; font-weight:600;">Salary</div>
+                    <div class="fw-semibold">₹{{ '{:,.0f}'.format(employee.salary) }}</div>
+                </div>
+                <div class="mb-3">
+                    <div style="color:var(--text-secondary); font-size:0.75rem; text-transform:uppercase; font-weight:600;">PAN</div>
+                    <div class="fw-semibold">{{ employee.pan_number or '—' }}</div>
+                </div>
+                <div>
+                    <div style="color:var(--text-secondary); font-size:0.75rem; text-transform:uppercase; font-weight:600;">Bank Account</div>
+                    <div class="fw-semibold">{{ employee.bank_account or '—' }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leave Balances -->
+    <div class="col-lg-4">
+        <div class="data-card">
+            <div class="card-header"><h5><i class="fas fa-scale-balanced me-2"></i>Leave Balances</h5></div>
+            <div class="p-4">
+                {% if leave_balances %}
+                {% for bal in leave_balances %}
+                <div class="d-flex justify-content-between align-items-center mb-3" style="padding-bottom:8px; border-bottom:1px solid var(--border-color);">
+                    <div>
+                        <div class="fw-semibold" style="font-size:0.88rem;">{{ bal.leave_type }}</div>
+                        <div style="font-size:0.75rem; color:var(--text-secondary);">Used {{ bal.used }} / {{ bal.total_allocated }}</div>
+                    </div>
+                    <div>
+                        <span style="font-size:1.3rem; font-weight:700; color:{% if bal.remaining > 5 %}var(--success){% elif bal.remaining > 0 %}#f59e0b{% else %}var(--danger){% endif %};">
+                            {{ bal.remaining }}
+                        </span>
+                        <span style="font-size:0.7rem; color:var(--text-secondary);">left</span>
+                    </div>
+                </div>
+                {% endfor %}
+                {% else %}
+                <p style="color:var(--text-secondary); text-align:center; padding:20px 0; font-size:0.85rem;">No balances initialized</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Attendance -->
+    <div class="col-lg-4">
+        <div class="data-card">
+            <div class="card-header"><h5><i class="fas fa-clipboard-check me-2"></i>Recent Attendance</h5></div>
+            <div class="table-responsive">
+                <table class="table" style="font-size:0.82rem;">
+                    <thead><tr><th>Date</th><th>In</th><th>Out</th><th>Status</th></tr></thead>
+                    <tbody>
+                        {% for a in recent_attendance %}
+                        <tr>
+                            <td>{{ a.date.strftime('%d %b') }}</td>
+                            <td>{{ a.check_in or '—' }}</td>
+                            <td>{{ a.check_out or '—' }}</td>
+                            <td><span class="badge-status badge-{{ a.status | lower }}">{{ a.status }}</span></td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="4" class="text-center py-3" style="color:var(--text-secondary);">No records</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Leaves -->
+<div class="data-card mt-4">
+    <div class="card-header"><h5><i class="fas fa-calendar-minus me-2"></i>Recent Leave Requests</h5></div>
+    <div class="table-responsive">
+        <table class="table" style="font-size:0.85rem;">
+            <thead><tr><th>Type</th><th>From</th><th>To</th><th>Days</th><th>Status</th><th>Reason</th></tr></thead>
+            <tbody>
+                {% for l in recent_leaves %}
+                <tr>
+                    <td class="fw-semibold">{{ l.leave_type }}</td>
+                    <td>{{ l.start_date.strftime('%d %b %Y') }}</td>
+                    <td>{{ l.end_date.strftime('%d %b %Y') }}</td>
+                    <td>{{ l.total_days or l.calc_days() }}</td>
+                    <td><span class="badge-status badge-{{ l.status | lower }}">{{ l.status }}</span></td>
+                    <td style="color:var(--text-secondary);">{{ l.reason[:50] }}{% if l.reason|length > 50 %}...{% endif %}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="text-center py-3" style="color:var(--text-secondary);">No leave requests</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

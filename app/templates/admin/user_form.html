@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — Enterprise Portal{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="{{ url_for('admin.users') }}" class="btn btn-outline-primary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Back to Users
+    </a>
+</div>
+
+<div class="form-card">
+    <form method="POST" novalidate>
+        {{ form.hidden_tag() }}
+
+        <div class="row g-3">
+            <div class="col-md-6">
+                <div class="mb-3">
+                    {{ form.full_name.label(class="form-label") }}
+                    {{ form.full_name(class="form-control", placeholder="John Doe") }}
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="mb-3">
+                    {{ form.username.label(class="form-label") }}
+                    {{ form.username(class="form-control", placeholder="johndoe") }}
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="mb-3">
+                    {{ form.email.label(class="form-label") }}
+                    {{ form.email(class="form-control", placeholder="john@company.com") }}
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="mb-3">
+                    {{ form.phone.label(class="form-label") }}
+                    {{ form.phone(class="form-control", placeholder="+91 98765 43210") }}
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="mb-3">
+                    {% if form.password is defined %}
+                    {{ form.password.label(class="form-label") }}
+                    {{ form.password(class="form-control", placeholder="Min 6 characters") }}
+                    {% else %}
+                    <label class="form-label">Password</label>
+                    <div style="background:#f0f9ff; border:1.5px solid #bae6fd; border-radius:8px; padding:10px 14px; font-size:0.85rem; color:#0369a1;">
+                        <i class="fas fa-magic me-1"></i>
+                        A temporary password will be auto-generated. You'll see it after creating the user.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="mb-3 pt-md-4">
+                    <div class="form-check form-switch">
+                        {{ form.is_admin(class="form-check-input", id="is_admin") }}
+                        <label class="form-check-label fw-semibold" for="is_admin">Admin Privileges</label>
+                    </div>
+                    {% if form.is_active is defined %}
+                    <div class="form-check form-switch mt-2">
+                        {{ form.is_active(class="form-check-input", id="is_active") }}
+                        <label class="form-check-label fw-semibold" for="is_active">Active Account</label>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Module Assignment -->
+        <hr class="my-4">
+        <div class="mb-4">
+            <label class="form-label" style="font-size:0.95rem;">
+                <i class="fas fa-cubes me-1" style="color:var(--primary);"></i>
+                Assign Modules
+            </label>
+            <p style="font-size:0.78rem; color:var(--text-secondary); margin-bottom:14px;">
+                Select which modules this user can access. Employee module is always included.
+            </p>
+            <div class="module-checkbox-list">
+                {% for module in all_modules %}
+                <label class="module-checkbox-item" for="module-{{ module.id }}">
+                    <input type="checkbox"
+                           name="modules"
+                           id="module-{{ module.id }}"
+                           value="{{ module.id }}"
+                           class="form-check-input"
+                           {% if module.id in (form.modules.data or []) %}checked{% endif %}
+                           {% if module.slug == 'employee' %}checked disabled{% endif %}>
+                    <div>
+                        <span style="font-weight:600; font-size:0.88rem;">
+                            <i class="{{ module.icon }} me-1" style="color:var(--primary);"></i>
+                            {{ module.name }}
+                        </span>
+                        {% if module.slug == 'employee' %}
+                        <span class="badge bg-secondary" style="font-size:0.6rem; margin-left:4px;">Always On</span>
+                        {% endif %}
+                        <div style="font-size:0.75rem; color:var(--text-secondary);">{{ module.description }}</div>
+                    </div>
+                </label>
+                {% endfor %}
+            </div>
+            <!-- Hidden field to ensure Employee is always submitted even when disabled -->
+            {% for module in all_modules %}
+                {% if module.slug == 'employee' %}
+                <input type="hidden" name="modules" value="{{ module.id }}">
+                {% endif %}
+            {% endfor %}
+        </div>
+
+        <div class="d-flex gap-2">
+            {{ form.submit(class="btn btn-primary") }}
+            <a href="{{ url_for('admin.users') }}" class="btn btn-outline-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

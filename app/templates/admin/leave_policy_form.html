@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — Enterprise Portal{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="{{ url_for('admin.leave_policies') }}" class="btn btn-outline-primary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Back to Leave Policies
+    </a>
+</div>
+
+<div class="form-card">
+    <form method="POST" novalidate>
+        {{ form.hidden_tag() }}
+        <div class="row g-3">
+            <div class="col-md-6">
+                {{ form.leave_type.label(class="form-label") }}
+                {{ form.leave_type(class="form-control", placeholder="e.g. Casual Leave") }}
+            </div>
+            <div class="col-md-6">
+                {{ form.total_days.label(class="form-label") }}
+                {{ form.total_days(class="form-control") }}
+            </div>
+            <div class="col-md-6">
+                <div class="form-check form-switch mt-3">
+                    {{ form.carry_forward(class="form-check-input", id="carry_forward") }}
+                    <label class="form-check-label fw-semibold" for="carry_forward">Allow Carry Forward</label>
+                </div>
+            </div>
+            <div class="col-md-6">
+                {{ form.max_carry_days.label(class="form-label") }}
+                {{ form.max_carry_days(class="form-control") }}
+            </div>
+            <div class="col-12">
+                {{ form.description.label(class="form-label") }}
+                {{ form.description(class="form-control", rows=2, placeholder="Policy details...") }}
+            </div>
+            <div class="col-12">
+                <div class="form-check form-switch">
+                    {{ form.is_active(class="form-check-input", id="is_active") }}
+                    <label class="form-check-label fw-semibold" for="is_active">Active Policy</label>
+                </div>
+            </div>
+        </div>
+        <hr class="my-4">
+        <div class="d-flex gap-2">
+            {{ form.submit(class="btn btn-primary") }}
+            <a href="{{ url_for('admin.leave_policies') }}" class="btn btn-outline-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

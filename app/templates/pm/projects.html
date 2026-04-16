@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Projects — Enterprise Portal{% endblock %}
+{% block page_title %}Projects{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 style="font-weight:700;">All Projects</h4>
+        <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">{{ projects | length }} projects</p>
+    </div>
+    <a href="{{ url_for('pm.add_project') }}" class="btn btn-primary" id="btn-add-project">
+        <i class="fas fa-plus me-2"></i>New Project
+    </a>
+</div>
+
+<!-- Status Filter -->
+<div class="mb-3 d-flex gap-2 flex-wrap">
+    <a href="{{ url_for('pm.projects') }}" class="btn btn-sm {% if not current_status %}btn-primary{% else %}btn-outline-primary{% endif %}">All</a>
+    <a href="{{ url_for('pm.projects', status='Not Started') }}" class="btn btn-sm {% if current_status == 'Not Started' %}btn-primary{% else %}btn-outline-primary{% endif %}">Not Started</a>
+    <a href="{{ url_for('pm.projects', status='In Progress') }}" class="btn btn-sm {% if current_status == 'In Progress' %}btn-primary{% else %}btn-outline-primary{% endif %}">In Progress</a>
+    <a href="{{ url_for('pm.projects', status='On Hold') }}" class="btn btn-sm {% if current_status == 'On Hold' %}btn-primary{% else %}btn-outline-primary{% endif %}">On Hold</a>
+    <a href="{{ url_for('pm.projects', status='Completed') }}" class="btn btn-sm {% if current_status == 'Completed' %}btn-primary{% else %}btn-outline-primary{% endif %}">Completed</a>
+</div>
+
+<div class="data-card">
+    <div class="table-responsive">
+        <table class="table" id="tbl-all-projects">
+            <thead>
+                <tr>
+                    <th>Project</th>
+                    <th>Status</th>
+                    <th>Progress</th>
+                    <th>Start</th>
+                    <th>Deadline</th>
+                    <th>Tasks</th>
+                    <th>Members</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in projects %}
+                <tr>
+                    <td>
+                        <a href="{{ url_for('pm.project_detail', project_id=p.id) }}" class="fw-semibold text-decoration-none">
+                            {{ p.name }}
+                        </a>
+                    </td>
+                    <td><span class="badge-status badge-{{ p.status | lower | replace(' ', '-') }}">{{ p.status }}</span></td>
+                    <td>
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="progress" style="width:60px; height:6px;">
+                                <div class="progress-bar {% if p.progress == 100 %}bg-success{% elif p.progress > 50 %}bg-primary{% elif p.progress > 0 %}bg-warning{% else %}bg-secondary{% endif %}"
+                                     style="width:{{ p.progress }}%"></div>
+                            </div>
+                            <small>{{ p.progress }}%</small>
+                        </div>
+                    </td>
+                    <td>{{ p.start_date.strftime('%d %b') if p.start_date else '—' }}</td>
+                    <td>
+                        {% if p.deadline %}
+                            <span class="{% if p.is_delayed %}text-danger fw-bold{% endif %}">
+                                {{ p.deadline.strftime('%d %b') }}
+                                {% if p.is_delayed %}<i class="fas fa-exclamation-circle ms-1" title="Delayed"></i>{% endif %}
+                            </span>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td>{{ p.tasks.count() }}</td>
+                    <td>{{ p.members.count() }}</td>
+                    <td>
+                        <div class="d-flex gap-1">
+                            <a href="{{ url_for('pm.edit_project', project_id=p.id) }}" class="btn-action" title="Edit">
+                                <i class="fas fa-pen-to-square"></i>
+                            </a>
+                            <form method="POST" action="{{ url_for('pm.delete_project', project_id=p.id) }}" class="d-inline"
+                                  onsubmit="return confirm('Delete project &quot;{{ p.name }}&quot;? This will also delete all tasks, milestones and members.')">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn-action danger" title="Delete">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="text-center py-4" style="color:var(--text-secondary);">No projects found</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

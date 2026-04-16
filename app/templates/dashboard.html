@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Enterprise Portal{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h2 style="font-weight:800; font-size:1.5rem;">Welcome, {{ current_user.full_name }} 👋</h2>
+    <p style="color:var(--text-secondary); font-size:0.92rem;">Select a module to get started</p>
+</div>
+
+<div class="row g-4">
+    {% for mod in modules %}
+    <div class="col-sm-6 col-lg-4 col-xl-3">
+        {% if mod.slug == 'admin' %}
+            <a href="{{ url_for('admin.dashboard') }}" class="module-card" data-module="admin" id="module-card-admin">
+        {% elif mod.slug == 'hr' %}
+            <a href="{{ url_for('hr.dashboard') }}" class="module-card" data-module="hr" id="module-card-hr">
+        {% elif mod.slug == 'pm' %}
+            <a href="{{ url_for('pm.dashboard') }}" class="module-card" data-module="pm" id="module-card-pm">
+        {% elif mod.slug == 'finance' %}
+            <a href="{{ url_for('finance.dashboard') }}" class="module-card" data-module="finance" id="module-card-finance">
+        {% elif mod.slug == 'employee' %}
+            <a href="{{ url_for('employee.dashboard') }}" class="module-card" data-module="employee" id="module-card-employee">
+        {% endif %}
+                <div class="module-icon">
+                    <i class="{{ mod.icon }}"></i>
+                </div>
+                <h5>{{ mod.name }}</h5>
+                <p>{{ mod.description }}</p>
+            </a>
+    </div>
+    {% endfor %}
+</div>
+
+{% if not modules %}
+<div class="empty-state">
+    <i class="fas fa-lock"></i>
+    <p>You don't have access to any modules yet.<br>Please contact your administrator.</p>
+</div>
+{% endif %}
+{% endblock %}

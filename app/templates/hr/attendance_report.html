@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Attendance Report — Enterprise Portal{% endblock %}
+{% block page_title %}Monthly Attendance Report{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="{{ url_for('hr.attendance') }}" class="btn btn-outline-primary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Back to Attendance
+    </a>
+</div>
+
+<!-- Month Selector -->
+<div class="data-card mb-4" style="padding:16px 20px;">
+    <form method="GET" class="row g-2 align-items-end">
+        <div class="col-md-3">
+            <label class="form-label" style="font-size:0.8rem;">Month</label>
+            <select name="month" class="form-select form-select-sm">
+                {% for m in range(1, 13) %}
+                {% set month_names = ['','January','February','March','April','May','June','July','August','September','October','November','December'] %}
+                <option value="{{ m }}" {% if month == m %}selected{% endif %}>{{ month_names[m] }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label" style="font-size:0.8rem;">Year</label>
+            <input type="number" name="year" class="form-control form-control-sm" value="{{ year }}" min="2020" max="2030">
+        </div>
+        <div class="col-md-2">
+            <button type="submit" class="btn btn-primary btn-sm w-100"><i class="fas fa-chart-bar me-1"></i>Generate</button>
+        </div>
+    </form>
+</div>
+
+{% set month_names = ['','January','February','March','April','May','June','July','August','September','October','November','December'] %}
+<div class="data-card">
+    <div class="card-header">
+        <h5><i class="fas fa-chart-bar me-2"></i>{{ month_names[month] }} {{ year }}</h5>
+    </div>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Employee</th>
+                    <th>Department</th>
+                    <th style="text-align:center;">Present</th>
+                    <th style="text-align:center;">Late</th>
+                    <th style="text-align:center;">Absent</th>
+                    <th style="text-align:center;">Half-Day</th>
+                    <th style="text-align:center;">Total Hours</th>
+                    <th style="text-align:center;">Effective Days</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in report %}
+                <tr>
+                    <td class="fw-semibold">{{ row.employee.user.full_name }}</td>
+                    <td><span class="badge bg-light text-dark border" style="font-size:0.7rem;">{{ row.employee.department_name }}</span></td>
+                    <td style="text-align:center;"><span style="color:var(--success); font-weight:600;">{{ row.present }}</span></td>
+                    <td style="text-align:center;"><span style="color:#f59e0b; font-weight:600;">{{ row.late }}</span></td>
+                    <td style="text-align:center;"><span style="color:var(--danger); font-weight:600;">{{ row.absent }}</span></td>
+                    <td style="text-align:center;"><span style="color:#8b5cf6; font-weight:600;">{{ row.half_day }}</span></td>
+                    <td style="text-align:center; font-weight:600;">{{ row.total_hours }}h</td>
+                    <td style="text-align:center;">
+                        <span style="font-size:1.1rem; font-weight:700; color:var(--primary);">{{ row.effective_days }}</span>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="text-center py-4" style="color:var(--text-secondary);">No data for this month</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

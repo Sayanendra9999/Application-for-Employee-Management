@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — Enterprise Portal{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="{{ url_for('admin.designations') }}" class="btn btn-outline-primary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Back to Designations
+    </a>
+</div>
+
+<div class="form-card">
+    <form method="POST" novalidate>
+        {{ form.hidden_tag() }}
+        <div class="row g-3">
+            <div class="col-md-6">
+                {{ form.title.label(class="form-label") }}
+                {{ form.title(class="form-control", placeholder="e.g. Software Engineer") }}
+            </div>
+            <div class="col-md-6">
+                {{ form.department_id.label(class="form-label") }}
+                {{ form.department_id(class="form-select") }}
+            </div>
+            <div class="col-md-6">
+                {{ form.level.label(class="form-label") }}
+                {{ form.level(class="form-select") }}
+            </div>
+            <div class="col-md-6">
+                <div class="pt-md-4">
+                    <div class="form-check form-switch">
+                        {{ form.is_active(class="form-check-input", id="is_active") }}
+                        <label class="form-check-label fw-semibold" for="is_active">Active Designation</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <hr class="my-4">
+        <div class="d-flex gap-2">
+            {{ form.submit(class="btn btn-primary") }}
+            <a href="{{ url_for('admin.designations') }}" class="btn btn-outline-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
