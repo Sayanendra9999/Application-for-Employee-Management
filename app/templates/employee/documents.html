@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}My Documents — Enterprise Portal{% endblock %}
+{% block page_title %}Document Center{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h4 style="font-weight:700;">My Documents</h4>
+    <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">{{ documents|length }} documents available (uploaded by HR)</p>
+</div>
+
+<div class="data-card">
+    <div class="table-responsive">
+        <table class="table">
+            <thead><tr><th>Document Type</th><th>File Name</th><th>Uploaded By</th><th>Date</th><th>Action</th></tr></thead>
+            <tbody>
+                {% for doc in documents %}
+                <tr>
+                    <td>
+                        <i class="fas fa-file-{% if doc.original_name.endswith('.pdf') %}pdf text-danger{% elif doc.original_name.endswith('.doc') or doc.original_name.endswith('.docx') %}word text-primary{% else %}alt text-secondary{% endif %} me-2"></i>
+                        <span class="fw-semibold">{{ doc.doc_type }}</span>
+                    </td>
+                    <td>{{ doc.original_name }}</td>
+                    <td>{{ doc.uploader.full_name if doc.uploader else '—' }}</td>
+                    <td>{{ doc.uploaded_at.strftime('%d %b %Y') }}</td>
+                    <td>
+                        <a href="{{ url_for('employee.document_download', doc_id=doc.id) }}" class="btn-action" title="Download">
+                            <i class="fas fa-download"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="text-center py-4" style="color:var(--text-secondary);">
+                    <i class="fas fa-folder-open fa-2x mb-2 d-block"></i>No documents available. Documents will appear here when uploaded by HR.
+                </td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

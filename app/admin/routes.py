@@ -95,11 +95,15 @@ def add_user():
             flash('Email already exists.', 'danger')
             return render_template('admin/user_form.html', form=form, title='Add User', all_modules=all_modules)
 
+        selected_ids = set(form.modules.data or [])
+        admin_module = Module.query.filter_by(slug='admin').first()
+        is_admin_selected = (admin_module and admin_module.id in selected_ids)
+
         temp_password = generate_readable_password()
         user = User(
             username=form.username.data, email=form.email.data,
             full_name=form.full_name.data, phone=form.phone.data,
-            is_admin=form.is_admin.data, must_change_password=True
+            is_admin=is_admin_selected, must_change_password=True
         )
         user.set_password(temp_password)
         db.session.add(user)
@@ -111,6 +115,17 @@ def add_user():
             selected_ids.add(emp_module.id)
         for mod_id in selected_ids:
             db.session.add(UserModule(user_id=user.id, module_id=mod_id))
+
+        # Auto-create an employee profile so the user can access Employee module without 404
+        emp = Employee(
+            user_id=user.id,
+            emp_code=f"EMP{user.id:04d}"
+        )
+        db.session.add(emp)
+        db.session.flush()
+        
+        from app.hr import services
+        services.initialize_leave_balances(emp.id)
 
         from flask_login import current_user
         log_audit(current_user.id, 'CREATE', 'User', user.id, f'Created user {user.username}')
@@ -151,13 +166,15 @@ def edit_user(user_id):
         user.email = form.email.data
         user.full_name = form.full_name.data
         user.phone = form.phone.data
-        user.is_admin = form.is_admin.data
         user.is_active_user = form.is_active.data
         if form.password.data:
             user.set_password(form.password.data)
 
         UserModule.query.filter_by(user_id=user.id).delete()
         selected_ids = set(form.modules.data or [])
+        admin_module = Module.query.filter_by(slug='admin').first()
+        user.is_admin = (admin_module and admin_module.id in selected_ids)
+
         emp_module = Module.query.filter_by(slug='employee').first()
         if emp_module:
             selected_ids.add(emp_module.id)

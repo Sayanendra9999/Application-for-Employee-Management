@@ -27,6 +27,9 @@
 - **[__init__.py](file:///c:/JGpc/app_at_present/app/__init__.py)** — Added `before_request` hook that blocks ALL routes except change-password and logout when `must_change_password=True`
 - **[seed_data.py](file:///c:/JGpc/app_at_present/seed_data.py)** — Test users have `must_change_password=False` so they work normally
 
+### 5. Forgot Password Functionality
+- **[login.html](file:///c:/JGpc/app_at_present/app/templates/login.html)** — Added a non-intrusive "Forgot Password?" link that opens a centered Bootstrap modal containing an email/username input form. Includes async JavaScript to call the API and handle inline success/error messages.
+- **[auth/routes.py](file:///c:/JGpc/app_at_present/app/auth/routes.py)** — Added a new POST API route `/api/auth/forgot-password` that checks if the given email or username exists in the database and returns a corresponding mock success or error JSON response.
 ---
 
 ## New Auth Flow
@@ -47,3 +50,6 @@ User sets their own password → must_change_password = False → Dashboard acce
 4. Create a user → see the green credential banner with the generated password
 5. Copy the password, logout, login as the new user
 6. You'll be forced to change the password before accessing anything
+7. On the login page, click **Forgot Password?**
+8. Enter a valid username or email and see the success message
+9. Enter an invalid username or email and see the inline error message

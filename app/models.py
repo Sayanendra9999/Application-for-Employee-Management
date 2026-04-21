@@ -655,3 +655,55 @@ class PerformanceReview(db.Model):
 
     def __repr__(self):
         return f'<PerformanceReview {self.review_period} emp#{self.employee_id}>'
+
+
+# ===========================================================================
+# EMPLOYEE SELF-SERVICE MODELS
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# ProfileUpdateRequest — Employee submits profile changes for HR approval
+# ---------------------------------------------------------------------------
+class ProfileUpdateRequest(db.Model):
+    __tablename__ = 'profile_update_requests'
+
+    id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey('employees.id', ondelete='CASCADE'), nullable=False)
+    field_name = db.Column(db.String(50), nullable=False)       # phone, bank_account, pan_number, emergency_contact
+    old_value = db.Column(db.String(250), default='')
+    new_value = db.Column(db.String(250), nullable=False)
+    status = db.Column(db.String(20), default='Pending')        # Pending, Approved, Rejected
+    reviewed_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    reviewed_at = db.Column(db.DateTime, nullable=True)
+
+    employee = db.relationship('Employee', backref=db.backref('profile_update_requests', lazy='dynamic'))
+    reviewer = db.relationship('User', foreign_keys=[reviewed_by])
+
+    def __repr__(self):
+        return f'<ProfileUpdateRequest {self.field_name} emp#{self.employee_id} {self.status}>'
+
+
+# ---------------------------------------------------------------------------
+# EmployeeExpense — Employee submits expense/reimbursement claims
+# ---------------------------------------------------------------------------
+class EmployeeExpense(db.Model):
+    __tablename__ = 'employee_expenses'
+
+    id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey('employees.id', ondelete='CASCADE'), nullable=False)
+    category = db.Column(db.String(60), nullable=False)         # Travel, Medical, Software, Food, Other
+    amount = db.Column(db.Float, nullable=False)
+    date = db.Column(db.Date, default=date.today)
+    description = db.Column(db.Text, default='')
+    receipt_filename = db.Column(db.String(250), default='')
+    receipt_original = db.Column(db.String(250), default='')
+    status = db.Column(db.String(20), default='Pending')        # Pending, Approved, Rejected
+    reviewed_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    employee = db.relationship('Employee', backref=db.backref('expense_claims', lazy='dynamic'))
+    reviewer = db.relationship('User', foreign_keys=[reviewed_by])
+
+    def __repr__(self):
+        return f'<EmployeeExpense {self.category} ₹{self.amount} emp#{self.employee_id}>'

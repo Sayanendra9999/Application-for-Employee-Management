@@ -5,7 +5,7 @@ from flask_login import current_user
 from app.finance import bp
 from app.decorators import module_required
 from app.extensions import db
-from app.models import Expense, Invoice, SalaryRecord, Employee
+from app.models import Expense, Invoice, SalaryRecord, Employee, EmployeeExpense
 from app.finance.forms import ExpenseForm, InvoiceForm, SalaryForm
 
 
@@ -92,6 +92,36 @@ def reject_expense(expense_id):
     db.session.commit()
     flash('Expense rejected.', 'warning')
     return redirect(url_for('finance.expenses'))
+
+
+# ── Invoices ─────────────────────────────────────────────────────────────────
+@bp.route('/employee-expenses')
+@module_required('finance')
+def employee_expenses():
+    all_claims = EmployeeExpense.query.order_by(EmployeeExpense.date.desc()).all()
+    return render_template('finance/employee_expenses.html', claims=all_claims)
+
+
+@bp.route('/employee-expenses/<int:claim_id>/approve', methods=['POST'])
+@module_required('finance')
+def approve_employee_expense(claim_id):
+    claim = EmployeeExpense.query.get_or_404(claim_id)
+    claim.status = 'Approved'
+    claim.reviewed_by = current_user.id
+    db.session.commit()
+    flash('Employee expense claim approved.', 'success')
+    return redirect(url_for('finance.employee_expenses'))
+
+
+@bp.route('/employee-expenses/<int:claim_id>/reject', methods=['POST'])
+@module_required('finance')
+def reject_employee_expense(claim_id):
+    claim = EmployeeExpense.query.get_or_404(claim_id)
+    claim.status = 'Rejected'
+    claim.reviewed_by = current_user.id
+    db.session.commit()
+    flash('Employee expense claim rejected.', 'warning')
+    return redirect(url_for('finance.employee_expenses'))
 
 
 # ── Invoices ─────────────────────────────────────────────────────────────────

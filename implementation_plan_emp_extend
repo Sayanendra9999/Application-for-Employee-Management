@@ -1,0 +1,286 @@
+# Employee Module — Production-Level Self-Service Upgrade
+
+Upgrade the existing Employee module from a basic 5-route dashboard into a full-featured, production-level Employee Self-Service Portal. The employee module will **consume** data from HR and Finance and **follow rules** from Admin — it will **never** implement admin/HR/finance logic itself.
+
+## Existing State
+
+The current Employee module has only 5 routes:
+- Dashboard (basic stats)
+- Profile (name + phone edit only)
+- My Tasks (read-only list)
+- My Leaves (list + request form)
+
+## Proposed Changes
+
+### Architecture Overview
+
+```
+app/employee/
+├── __init__.py          # Blueprint definition (existing, minor update)
+├── routes.py            # All route handlers (rewrite — expanded from 5 to ~25 routes)
+├── services.py          # [NEW] Business logic layer — self-service operations
+├── forms.py             # WTForms (rewrite — expanded from 2 to ~8 forms)
+├── schemas.py           # [NEW] Input validation & response formatting utilities
+└── utils.py             # [NEW] Helpers (logging, notification creation, etc.)
+```
+
+---
+
+### New Database Tables (added to `app/models.py`)
+
+#### 1. `ProfileUpdateRequest` — Employee submits profile changes for HR approval
+| Column | Type | Notes |
+|--------|------|-------|
+| id | Integer PK | Auto |
+| employee_id | FK → employees | Who is requesting |
+| field_name | String(50) | e.g. "phone", "bank_account" |
+| old_value | String(250) | Current value |
+| new_value | String(250) | Requested value |
+| status | String(20) | Pending / Approved / Rejected |
+| reviewed_by | FK → users | HR user who reviewed |
+| created_at | DateTime | When submitted |
+| reviewed_at | DateTime | When reviewed |
+
+#### 2. `EmployeeExpense` — Employee submits expense/reimbursement claims
+| Column | Type | Notes |
+|--------|------|-------|
+| id | Integer PK | Auto |
+| employee_id | FK → employees | Submitter |
+| category | String(60) | Travel, Software, Medical, etc. |
+| amount | Float | Claim amount |
+| date | Date | Expense date |
+| description | Text | Details |
+| receipt_filename | String(250) | Uploaded receipt file |
+| receipt_original | String(250) | Original filename |
+| status | String(20) | Pending / Approved / Rejected |
+| reviewed_by | FK → users | Finance/HR reviewer |
+| created_at | DateTime | Submission time |
+
+> [!NOTE]
+> These are **separate** from the existing `Expense` model (which is a Finance-side corporate expense tracker). `EmployeeExpense` is for employee reimbursement claims that flow to Finance for approval.
+
+---
+
+### Component Breakdown
+
+---
+
+#### Employee Module — Services Layer
+
+##### [NEW] [services.py](file:///c:/app_at_present/app/employee/services.py)
+
+Self-service business logic, all consuming data from existing models:
+
+- **Profile Services**: `get_employee_profile()`, `submit_profile_update_request()`, `get_profile_update_requests()`
+- **Attendance Services**: `perform_self_checkin()`, `perform_self_checkout()`, `get_my_attendance_history()`, `get_my_attendance_summary()` — wraps `hr.services` functions scoped to current employee
+- **Leave Services**: `get_my_leave_balances()`, `get_my_leaves()`, `submit_leave_request()` — wraps `hr.services.validate_leave_request()`
+- **Payslip Services**: `get_my_salary_records()`, `get_payslip_detail()` — read-only from `SalaryRecord`
+- **Expense Services**: `submit_expense_claim()`, `get_my_expense_claims()` — creates `EmployeeExpense` records
+- **Document Services**: `get_my_documents()` — read-only from `EmployeeDocument`
+- **Performance Services**: `get_my_reviews()`, `submit_self_assessment()` — read-only from `PerformanceReview`
+- **Notification Services**: `get_my_notifications()`, `mark_notification_read()`, `get_unread_count()`
+- **Project/Task Services**: `get_my_projects()`, `get_my_tasks()` — read-only from `Project`, `Task`, `ProjectMember`
+
+---
+
+##### [NEW] [schemas.py](file:///c:/app_at_present/app/employee/schemas.py)
+
+Validation and response formatting utilities:
+- Input validators for profile updates, expense amounts, dates
+- Response formatters for consistent API responses
+
+---
+
+##### [NEW] [utils.py](file:///c:/app_at_present/app/employee/utils.py)
+
+Shared helpers:
+- `create_notification()` — creates notification records
+- `log_employee_action()` — wraps audit log with employee context
+- `get_current_employee_or_abort()` — helper to get employee profile or 404
+- Logging setup for employee module
+
+---
+
+#### Employee Module — Routes
+
+##### [MODIFY] [routes.py](file:///c:/app_at_present/app/employee/routes.py)
+
+Complete rewrite expanding from 5 routes to ~25 routes:
+
+| # | Route | Method | Feature |
+|---|-------|--------|---------|
+| 1 | `/employee/` | GET | Dashboard with rich stats |
+| 2 | `/employee/profile` | GET, POST | View & edit profile (name, phone, email) |
+| 3 | `/employee/profile/update-request` | POST | Submit sensitive field update (bank, PAN) for HR approval |
+| 4 | `/employee/profile/update-requests` | GET | View pending profile update requests |
+| 5 | `/employee/attendance` | GET | Attendance history with filters |
+| 6 | `/employee/attendance/checkin` | POST | Self check-in |
+| 7 | `/employee/attendance/checkout` | POST | Self check-out |
+| 8 | `/employee/leaves` | GET | Leave history |
+| 9 | `/employee/leaves/request` | GET, POST | Apply for leave |
+| 10 | `/employee/leaves/balance` | GET | View leave balances |
+| 11 | `/employee/payslips` | GET | List salary records |
+| 12 | `/employee/payslips/<id>` | GET | Payslip detail view |
+| 13 | `/employee/expenses` | GET | List expense claims |
+| 14 | `/employee/expenses/submit` | GET, POST | Submit expense claim with receipt upload |
+| 15 | `/employee/expenses/<id>` | GET | Expense claim detail |
+| 16 | `/employee/documents` | GET | View/download documents |
+| 17 | `/employee/documents/<id>/download` | GET | Download specific document |
+| 18 | `/employee/performance` | GET | View performance reviews |
+| 19 | `/employee/performance/<id>` | GET | Review detail |
+| 20 | `/employee/notifications` | GET | All notifications |
+| 21 | `/employee/notifications/<id>/read` | POST | Mark notification as read |
+| 22 | `/employee/notifications/mark-all-read` | POST | Mark all as read |
+| 23 | `/employee/projects` | GET | Assigned projects |
+| 24 | `/employee/tasks` | GET | Assigned tasks |
+
+---
+
+#### Employee Module — Forms
+
+##### [MODIFY] [forms.py](file:///c:/app_at_present/app/employee/forms.py)
+
+Expanded from 2 forms to ~8 forms:
+
+- `ProfileForm` — enhanced with emergency contact
+- `ProfileUpdateRequestForm` — for bank details, PAN changes
+- `LeaveRequestForm` — existing, with improved validation
+- `ExpenseClaimForm` — category, amount, date, description, receipt upload
+- `AttendanceCheckForm` — simple time field for manual check-in/out
+- `SelfAssessmentForm` — optional self-assessment text
+
+---
+
+#### Employee Module — Templates
+
+All new templates following the existing `base.html` design system:
+
+| Template | Purpose |
+|----------|---------|
+| `dashboard.html` | Rewritten — rich stats, quick actions, notifications preview, attendance status |
+| `profile.html` | Rewritten — full profile card with all details, update form, pending requests |
+| `attendance.html` | [NEW] Check-in/out buttons, history table with filters |
+| `leave_balance.html` | [NEW] Leave balance cards by type |
+| `my_leaves.html` | Enhanced — status filters, balance summary |
+| `leave_request.html` | Enhanced — balance preview before submission |
+| `payslips.html` | [NEW] Salary records list with download |
+| `payslip_detail.html` | [NEW] Detailed payslip breakdown |
+| `expenses.html` | [NEW] Expense claims list |
+| `expense_form.html` | [NEW] Submit expense claim form |
+| `expense_detail.html` | [NEW] Expense claim detail |
+| `documents.html` | [NEW] Document center — list and download |
+| `performance.html` | [NEW] Performance reviews list |
+| `performance_detail.html` | [NEW] Review detail view |
+| `notifications.html` | [NEW] Notifications center |
+| `projects.html` | [NEW] Assigned projects |
+| `my_tasks.html` | Enhanced — project grouping, priority badges |
+
+---
+
+#### Models Layer
+
+##### [MODIFY] [models.py](file:///c:/app_at_present/app/models.py)
+
+Add 2 new models (appended at end, no existing code changed):
+- `ProfileUpdateRequest` — for HR-approved profile changes
+- `EmployeeExpense` — for employee expense/reimbursement claims
+
+Add relationship to `Employee`:
+- `profile_update_requests` → `ProfileUpdateRequest`
+- `expense_claims` → `EmployeeExpense`
+
+---
+
+#### Schema Updates
+
+##### [MODIFY] [schema.sql](file:///c:/app_at_present/app/../schema.sql)
+
+Add 2 new table definitions appended at end for reference.
+
+---
+
+#### Blueprint Registration
+
+##### [MODIFY] [__init__.py](file:///c:/app_at_present/app/employee/__init__.py)
+
+Minor update — import routes (already done, no change needed).
+
+---
+
+#### Sidebar Enhancement
+
+##### [MODIFY] [base.html](file:///c:/app_at_present/app/templates/base.html)
+
+Expand the Employee sidebar entry to show sub-nav links for quick access + notification badge counter.
+
+---
+
+#### Seed Data
+
+##### [MODIFY] [seed_data.py](file:///c:/app_at_present/seed_data.py)
+
+Add sample data for:
+- `EmployeeExpense` records (2–3 per employee)
+- `ProfileUpdateRequest` records (1–2 samples)
+- Additional `Notification` records for employee events
+
+---
+
+### Integration Points (Read-Only Consumption)
+
+| Source Module | Data Consumed | How |
+|--------------|---------------|-----|
+| **HR** | Attendance records, Leave balances, Leave policies, Employee documents, Performance reviews | Direct model queries scoped to `current_user.employee` |
+| **Finance** | Salary records (payslips) | Direct model queries scoped to `current_user.employee` |
+| **Admin** | Leave policies, Attendance rules | Read `LeavePolicy`, `AttendanceRule` models |
+| **PM** | Projects, Tasks | Query `ProjectMember`, `Task` filtered by `current_user.id` |
+
+> [!IMPORTANT]
+> The Employee module **never writes** to HR/Finance/Admin tables except for:
+> 1. Creating `Leave` records (already exists, unchanged)
+> 2. Creating `Attendance` records for self check-in/out (already supported by `hr.services`)
+> 3. Creating `Notification` records for self-triggered events
+
+---
+
+### Production-Level Features
+
+1. **Logging**: Python `logging` module configured per-service function
+2. **Error Handling**: Try/except blocks in services, flash messages in routes, proper HTTP status codes
+3. **Input Validation**: WTForms validators + custom schema validators in `schemas.py`
+4. **RBAC**: All routes use `@module_required('employee')` decorator. No approval endpoints exposed.
+5. **Audit Trail**: All employee actions logged via `AuditLog`
+6. **Notifications**: Auto-created for leave submissions, expense claims, profile update requests
+
+---
+
+## Verification Plan
+
+### Automated Tests
+- Run `python app.py` and verify server starts without import errors
+- Run `python seed_data.py` to verify all new models create successfully
+- Manually test each route via browser
+
+### Manual Verification
+- Log in as `john_doe` (employee user) and verify:
+  - Dashboard shows rich stats
+  - Can check-in/check-out
+  - Can view attendance history
+  - Can submit leave, view balance
+  - Can view payslips (read-only)
+  - Can submit expense claims
+  - Can view documents
+  - Can view performance reviews
+  - Notifications work
+  - Projects/tasks visible
+
+---
+
+## Output Deliverables
+
+1. ✅ Folder structure (clean architecture)
+2. ✅ Models (2 new: `ProfileUpdateRequest`, `EmployeeExpense`)
+3. ✅ Services (`services.py` — full business logic layer)
+4. ✅ Routes (~25 RESTful endpoints)
+5. ✅ Templates (17 templates)
+6. ✅ `walkthrough_employee.md` documenting all changes

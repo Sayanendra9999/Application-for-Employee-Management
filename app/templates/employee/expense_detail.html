@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Expense Detail — Enterprise Portal{% endblock %}
+{% block page_title %}Expense Detail{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="{{ url_for('employee.expenses') }}" class="btn btn-outline-primary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Back to Expenses
+    </a>
+</div>
+
+<div class="form-card" style="max-width:600px;">
+    <div class="d-flex justify-content-between align-items-start mb-4">
+        <h5 class="fw-bold"><i class="fas fa-receipt me-2" style="color:var(--primary);"></i>{{ claim.category }}</h5>
+        <span class="badge-status badge-{{ claim.status|lower }}">{{ claim.status }}</span>
+    </div>
+
+    <div class="row g-3" style="font-size:0.9rem;">
+        <div class="col-6"><strong>Amount:</strong> <span class="fw-bold" style="color:var(--success);">₹{{ '{:,.0f}'.format(claim.amount) }}</span></div>
+        <div class="col-6"><strong>Date:</strong> {{ claim.date.strftime('%d %b %Y') if claim.date else '—' }}</div>
+        <div class="col-12"><strong>Description:</strong><br>{{ claim.description or '—' }}</div>
+        <div class="col-6"><strong>Submitted:</strong> {{ claim.created_at.strftime('%d %b %Y %H:%M') }}</div>
+        <div class="col-6"><strong>Reviewed By:</strong> {{ claim.reviewer.full_name if claim.reviewer else '—' }}</div>
+    </div>
+
+    {% if claim.receipt_filename %}
+    <hr>
+    <div>
+        <strong>Receipt:</strong>
+        <span style="font-size:0.85rem;">{{ claim.receipt_original }}</span>
+        <i class="fas fa-paperclip text-primary ms-1"></i>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

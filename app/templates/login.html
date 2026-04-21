@@ -62,6 +62,7 @@
                         {{ form.remember(class="form-check-input", id="remember") }}
                         <label class="form-check-label" for="remember" style="font-size:0.85rem;">Remember me</label>
                     </div>
+                    <a href="#" data-bs-toggle="modal" data-bs-target="#forgotPasswordModal" style="font-size:0.85rem; text-decoration:none; color:#2563eb; font-weight:500;">Forgot Password?</a>
                 </div>
 
                 <button type="submit" class="btn btn-primary btn-login">
@@ -76,6 +77,90 @@
         </div>
     </div>
 
+    <!-- Forgot Password Modal -->
+    <div class="modal fade" id="forgotPasswordModal" tabindex="-1" aria-labelledby="forgotPasswordModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius:12px; border:none; box-shadow:0 10px 25px rgba(0,0,0,0.1);">
+          <div class="modal-header" style="border-bottom:1px solid #f1f5f9; padding:1.5rem;">
+            <h5 class="modal-title fw-bold" id="forgotPasswordModalLabel" style="color:#1e293b;">Reset Password</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" style="padding:1.5rem;">
+            <p style="font-size:0.9rem; color:#64748b; margin-bottom:1.5rem;">Enter your email address or username and we'll send you a link to reset your password.</p>
+            <form id="forgotPasswordForm">
+              <div class="mb-3">
+                <label for="resetIdentity" class="form-label fw-semibold" style="font-size:0.85rem;">Email or Username</label>
+                <div class="input-group">
+                    <span class="input-group-text" style="border-radius:10px 0 0 10px; background:#f8fafc; border:1.5px solid #e2e8f0; border-right:0;">
+                        <i class="fas fa-envelope" style="color:#94a3b8;"></i>
+                    </span>
+                    <input type="text" class="form-control" id="resetIdentity" placeholder="Enter email or username" style="border-radius:0 10px 10px 0; border:1.5px solid #e2e8f0; border-left:0; padding:11px 14px;" required>
+                </div>
+                <div id="resetError" class="text-danger mt-2" style="font-size:0.85rem; display:none;"></div>
+                <div id="resetSuccess" class="text-success mt-2" style="font-size:0.85rem; display:none;"></div>
+              </div>
+              <div class="d-grid gap-2 mt-4">
+                <button type="submit" class="btn btn-primary" id="resetBtn" style="padding:10px; border-radius:10px; font-weight:600;">
+                  Send Reset Link
+                </button>
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal" style="padding:10px; border-radius:10px; font-weight:500; color:#64748b; background:#f8fafc; border:1px solid #e2e8f0;">
+                  Back to Login
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.getElementById('forgotPasswordForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const identity = document.getElementById('resetIdentity').value.trim();
+            const errorDiv = document.getElementById('resetError');
+            const successDiv = document.getElementById('resetSuccess');
+            const resetBtn = document.getElementById('resetBtn');
+            
+            errorDiv.style.display = 'none';
+            successDiv.style.display = 'none';
+            
+            if (!identity) {
+                errorDiv.textContent = 'Please enter an email or username.';
+                errorDiv.style.display = 'block';
+                return;
+            }
+            
+            resetBtn.disabled = true;
+            resetBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Sending...';
+            
+            try {
+                const response = await fetch('/api/auth/forgot-password', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ identity: identity })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    successDiv.textContent = data.message;
+                    successDiv.style.display = 'block';
+                    document.getElementById('resetIdentity').value = '';
+                } else {
+                    errorDiv.textContent = data.error || 'An error occurred. Please try again.';
+                    errorDiv.style.display = 'block';
+                }
+            } catch (err) {
+                errorDiv.textContent = 'Network error. Please try again later.';
+                errorDiv.style.display = 'block';
+            } finally {
+                resetBtn.disabled = false;
+                resetBtn.innerHTML = 'Send Reset Link';
+            }
+        });
+    </script>
 </body>
 </html>

@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Employee Expenses — Enterprise Portal{% endblock %}
+{% block page_title %}Employee Expenses{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 style="font-weight:700;">Employee Expense Claims</h4>
+        <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">{{ claims | length }} records</p>
+    </div>
+</div>
+
+<div class="data-card">
+    <div class="table-responsive">
+        <table class="table" id="claims-table">
+            <thead>
+                <tr>
+                    <th>Employee</th>
+                    <th>Category</th>
+                    <th>Amount</th>
+                    <th>Date</th>
+                    <th>Description</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for claim in claims %}
+                <tr>
+                    <td class="fw-semibold">{{ claim.employee.user.full_name }} ({{ claim.employee.emp_code }})</td>
+                    <td>{{ claim.category }}</td>
+                    <td>₹{{ "{:,.2f}".format(claim.amount) }}</td>
+                    <td>{{ claim.date.strftime('%d %b %Y') if claim.date else '—' }}</td>
+                    <td style="max-width:200px;">{{ claim.description[:60] }}{% if claim.description|length > 60 %}…{% endif %}</td>
+                    <td><span class="badge-status badge-{{ claim.status | lower }}">{{ claim.status }}</span></td>
+                    <td>
+                        <div class="d-flex gap-1">
+                            {% if claim.status == 'Pending' %}
+                            <form method="POST" action="{{ url_for('finance.approve_employee_expense', claim_id=claim.id) }}" class="d-inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn-action" title="Approve" style="color:var(--success);">
+                                    <i class="fas fa-check"></i>
+                                </button>
+                            </form>
+                            <form method="POST" action="{{ url_for('finance.reject_employee_expense', claim_id=claim.id) }}" class="d-inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn-action danger" title="Reject">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" class="text-center py-4" style="color:var(--text-secondary);">No employee expenses submitted</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

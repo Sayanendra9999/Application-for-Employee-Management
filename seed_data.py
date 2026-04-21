@@ -12,7 +12,8 @@ from app.models import (User, Module, UserModule, Employee, Leave, LeaveBalance,
                         Milestone, Notification,
                         Expense, Invoice, SalaryRecord,
                         Department, Designation, LeavePolicy, AttendanceRule,
-                        PerformanceReview, JobPosting, Candidate, Interview)
+                        PerformanceReview, JobPosting, Candidate, Interview,
+                        ProfileUpdateRequest, EmployeeExpense)
 
 
 def seed():
@@ -177,6 +178,9 @@ def seed():
 
         # ── Employee records (now linked to departments & designations) ──
         employees_data = [
+            {'user': 'admin', 'code': 'EMP000', 'dept': 'HR',
+             'designation': ('HR Manager', dept_map['HR'].id),
+             'salary': 150000, 'doj': date(2020, 1, 1), 'pan': 'ADMIN1234Z'},
             {'user': 'hr_manager', 'code': 'EMP001', 'dept': 'HR',
              'designation': ('HR Manager', dept_map['HR'].id),
              'salary': 85000, 'doj': date(2022, 3, 15), 'pan': 'ABCPS1234A'},
@@ -620,6 +624,88 @@ def seed():
         )
         db.session.add_all([intv1, intv2])
         print("[OK] Recruitment data created (jobs, candidates, interviews).")
+
+        # ── Employee Expense Claims (Self-Service) ───────────────────────
+        expense_claims = [
+            {'emp': 'john_doe', 'category': 'Travel', 'amount': 3500,
+             'date': date(2026, 4, 2), 'desc': 'Cab fare to client office',
+             'status': 'Approved'},
+            {'emp': 'john_doe', 'category': 'Software', 'amount': 1200,
+             'date': date(2026, 4, 8), 'desc': 'Postman Pro license (monthly)',
+             'status': 'Pending'},
+            {'emp': 'jane_smith', 'category': 'Medical', 'amount': 5000,
+             'date': date(2026, 3, 25), 'desc': 'Annual health checkup',
+             'status': 'Approved'},
+            {'emp': 'pm_lead', 'category': 'Travel', 'amount': 12000,
+             'date': date(2026, 4, 5), 'desc': 'Flight to Bangalore for team meeting',
+             'status': 'Pending'},
+            {'emp': 'bob_wilson', 'category': 'Training', 'amount': 8000,
+             'date': date(2026, 3, 15), 'desc': 'HR Analytics online course',
+             'status': 'Rejected'},
+        ]
+        for ec in expense_claims:
+            claim = EmployeeExpense(
+                employee_id=emp_objects[ec['emp']].id,
+                category=ec['category'],
+                amount=ec['amount'],
+                date=ec['date'],
+                description=ec['desc'],
+                status=ec['status']
+            )
+            db.session.add(claim)
+        print("[OK] Employee expense claims created.")
+
+        # ── Profile Update Requests ──────────────────────────────────────
+        profile_requests = [
+            {'emp': 'john_doe', 'field': 'bank_account', 'old': 'XXXX-XXXX-004',
+             'new': 'SBI-1234567890', 'status': 'Pending'},
+            {'emp': 'jane_smith', 'field': 'pan_number', 'old': 'EFGJS7890E',
+             'new': 'EFGJS7890F', 'status': 'Approved',
+             'reviewed_by': 'hr_manager'},
+        ]
+        for pr in profile_requests:
+            req = ProfileUpdateRequest(
+                employee_id=emp_objects[pr['emp']].id,
+                field_name=pr['field'],
+                old_value=pr['old'],
+                new_value=pr['new'],
+                status=pr['status'],
+                reviewed_by=user_objects[pr['reviewed_by']].id if pr.get('reviewed_by') else None
+            )
+            db.session.add(req)
+        print("[OK] Profile update requests created.")
+
+        # ── Additional Employee Notifications ────────────────────────────
+        emp_notifs = [
+            {'user': 'john_doe', 'title': 'Leave Approved',
+             'message': 'Your Casual Leave request (5-7 Apr) has been approved.',
+             'category': 'success', 'is_read': True},
+            {'user': 'john_doe', 'title': 'Expense Approved',
+             'message': 'Your travel expense claim of ₹3,500 has been approved.',
+             'category': 'success', 'is_read': False},
+            {'user': 'john_doe', 'title': 'Profile Update Pending',
+             'message': 'Your bank account update request is pending HR review.',
+             'category': 'info', 'is_read': False},
+            {'user': 'jane_smith', 'title': 'Payslip Available',
+             'message': 'Your payslip for March 2026 is now available.',
+             'category': 'info', 'is_read': False},
+            {'user': 'pm_lead', 'title': 'Leave Request Submitted',
+             'message': 'Your Earned Leave request (20-25 Apr) has been submitted.',
+             'category': 'info', 'is_read': False},
+            {'user': 'bob_wilson', 'title': 'Expense Rejected',
+             'message': 'Your training expense claim of ₹8,000 was rejected.',
+             'category': 'danger', 'is_read': False},
+        ]
+        for en in emp_notifs:
+            n = Notification(
+                user_id=user_objects[en['user']].id,
+                title=en['title'],
+                message=en['message'],
+                category=en['category'],
+                is_read=en['is_read']
+            )
+            db.session.add(n)
+        print("[OK] Employee notifications created.")
 
         # ── Commit all ───────────────────────────────────────────────────
         db.session.commit()

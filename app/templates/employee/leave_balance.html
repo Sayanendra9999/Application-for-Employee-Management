@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Leave Balance — Enterprise Portal{% endblock %}
+{% block page_title %}Leave Balance{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="{{ url_for('employee.my_leaves') }}" class="btn btn-outline-primary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Back to Leaves
+    </a>
+</div>
+
+<div class="row g-4">
+    {% for bal in balances %}
+    <div class="col-md-6 col-lg-4">
+        <div class="data-card">
+            <div class="p-4">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <h6 class="fw-bold mb-0">{{ bal.leave_type }}</h6>
+                    <span class="badge-status badge-{% if bal.remaining > 5 %}approved{% elif bal.remaining > 0 %}pending{% else %}rejected{% endif %}">
+                        {{ bal.remaining }} remaining
+                    </span>
+                </div>
+                <div class="progress mb-3" style="height:8px;">
+                    {% set pct = ((bal.remaining / bal.total_allocated) * 100) if bal.total_allocated > 0 else 0 %}
+                    <div class="progress-bar bg-{% if pct > 50 %}success{% elif pct > 20 %}warning{% else %}danger{% endif %}" style="width:{{ pct }}%"></div>
+                </div>
+                <div class="row g-2" style="font-size:0.85rem;">
+                    <div class="col-4 text-center">
+                        <div class="fw-bold" style="color:var(--primary);">{{ bal.total_allocated }}</div>
+                        <div style="color:var(--text-secondary); font-size:0.75rem;">Allocated</div>
+                    </div>
+                    <div class="col-4 text-center">
+                        <div class="fw-bold" style="color:var(--danger);">{{ bal.used }}</div>
+                        <div style="color:var(--text-secondary); font-size:0.75rem;">Used</div>
+                    </div>
+                    <div class="col-4 text-center">
+                        <div class="fw-bold" style="color:var(--success);">{{ bal.remaining }}</div>
+                        <div style="color:var(--text-secondary); font-size:0.75rem;">Available</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="col-12">
+        <div class="data-card">
+            <div class="p-4 text-center" style="color:var(--text-secondary);">
+                <i class="fas fa-calendar-xmark fa-2x mb-2"></i>
+                <p>No leave balances found. Contact HR to initialize your balances.</p>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% if policies %}
+<div class="data-card mt-4">
+    <div class="card-header"><h5><i class="fas fa-info-circle me-2"></i>Leave Policies</h5></div>
+    <div class="table-responsive">
+        <table class="table">
+            <thead><tr><th>Leave Type</th><th>Days/Year</th><th>Carry Forward</th><th>Description</th></tr></thead>
+            <tbody>
+                {% for policy in policies %}
+                <tr>
+                    <td class="fw-semibold">{{ policy.leave_type }}</td>
+                    <td>{{ policy.total_days }}</td>
+                    <td>{% if policy.carry_forward %}<span class="badge-status badge-approved">Yes (max {{ policy.max_carry_days }})</span>{% else %}<span class="badge-status badge-rejected">No</span>{% endif %}</td>
+                    <td style="color:var(--text-secondary);">{{ policy.description }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

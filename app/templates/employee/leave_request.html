@@ -5,40 +5,63 @@
 {% block content %}
 <div class="mb-3">
     <a href="{{ url_for('employee.my_leaves') }}" class="btn btn-outline-primary btn-sm">
-        <i class="fas fa-arrow-left me-1"></i>Back to Employee Leaves
+        <i class="fas fa-arrow-left me-1"></i>Back to Leaves
     </a>
 </div>
 
-<div class="form-card">
-    <h5 class="fw-bold mb-4"><i class="fas fa-calendar-plus me-2" style="color:var(--primary);"></i>New Leave Request</h5>
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="form-card" style="max-width:100%;">
+            <h5 class="fw-bold mb-4"><i class="fas fa-calendar-plus me-2" style="color:var(--primary);"></i>New Leave Request</h5>
+            <form method="POST" novalidate>
+                {{ form.hidden_tag() }}
+                <div class="row g-3">
+                    <div class="col-md-12">
+                        {{ form.leave_type.label(class="form-label") }}
+                        {{ form.leave_type(class="form-select") }}
+                    </div>
+                    <div class="col-md-6">
+                        {{ form.start_date.label(class="form-label") }}
+                        {{ form.start_date(class="form-control", type="date") }}
+                    </div>
+                    <div class="col-md-6">
+                        {{ form.end_date.label(class="form-label") }}
+                        {{ form.end_date(class="form-control", type="date") }}
+                    </div>
+                    <div class="col-12">
+                        {{ form.reason.label(class="form-label") }}
+                        {{ form.reason(class="form-control", rows=3, placeholder="Reason for leave (optional)...") }}
+                    </div>
+                </div>
+                <hr class="my-4">
+                <div class="d-flex gap-2">
+                    {{ form.submit(class="btn btn-primary") }}
+                    <a href="{{ url_for('employee.my_leaves') }}" class="btn btn-outline-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
 
-    <form method="POST" novalidate>
-        {{ form.hidden_tag() }}
-
-        <div class="row g-3">
-            <div class="col-md-12">
-                {{ form.leave_type.label(class="form-label") }}
-                {{ form.leave_type(class="form-select") }}
-            </div>
-            <div class="col-md-6">
-                {{ form.start_date.label(class="form-label") }}
-                {{ form.start_date(class="form-control", type="date") }}
-            </div>
-            <div class="col-md-6">
-                {{ form.end_date.label(class="form-label") }}
-                {{ form.end_date(class="form-control", type="date") }}
-            </div>
-            <div class="col-12">
-                {{ form.reason.label(class="form-label") }}
-                {{ form.reason(class="form-control", rows=3, placeholder="Reason for leave (optional)...") }}
+    <div class="col-lg-4">
+        <div class="data-card">
+            <div class="card-header"><h5><i class="fas fa-chart-pie me-2"></i>Current Balance</h5></div>
+            <div class="p-4">
+                {% for bal in leave_balances %}
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-1" style="font-size:0.85rem;">
+                        <span class="fw-semibold">{{ bal.leave_type }}</span>
+                        <span>{{ bal.remaining }} / {{ bal.total_allocated }}</span>
+                    </div>
+                    <div class="progress" style="height:5px;">
+                        {% set pct = ((bal.remaining / bal.total_allocated) * 100) if bal.total_allocated > 0 else 0 %}
+                        <div class="progress-bar bg-{% if pct > 50 %}success{% elif pct > 20 %}warning{% else %}danger{% endif %}" style="width:{{ pct }}%"></div>
+                    </div>
+                </div>
+                {% else %}
+                <p style="color:var(--text-secondary); font-size:0.85rem;">No balances available</p>
+                {% endfor %}
             </div>
         </div>
-
-        <hr class="my-4">
-        <div class="d-flex gap-2">
-            {{ form.submit(class="btn btn-primary") }}
-            <a href="{{ url_for('employee.my_leaves') }}" class="btn btn-outline-secondary">Cancel</a>
-        </div>
-    </form>
+    </div>
 </div>
 {% endblock %}

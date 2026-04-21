@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Submit Expense — Enterprise Portal{% endblock %}
+{% block page_title %}Submit Expense Claim{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="{{ url_for('employee.expenses') }}" class="btn btn-outline-primary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Back to Expenses
+    </a>
+</div>
+
+<div class="form-card">
+    <h5 class="fw-bold mb-4"><i class="fas fa-receipt me-2" style="color:var(--primary);"></i>New Expense Claim</h5>
+    <form method="POST" enctype="multipart/form-data" novalidate>
+        {{ form.hidden_tag() }}
+        <div class="row g-3">
+            <div class="col-md-6">
+                {{ form.category.label(class="form-label") }}
+                {{ form.category(class="form-select") }}
+            </div>
+            <div class="col-md-6">
+                {{ form.amount.label(class="form-label") }}
+                {{ form.amount(class="form-control", placeholder="0.00") }}
+            </div>
+            <div class="col-md-6">
+                {{ form.date.label(class="form-label") }}
+                {{ form.date(class="form-control", type="date") }}
+            </div>
+            <div class="col-md-6">
+                {{ form.receipt.label(class="form-label") }}
+                {{ form.receipt(class="form-control") }}
+                <div class="form-text">PDF, JPG, or PNG (max 5MB)</div>
+            </div>
+            <div class="col-12">
+                {{ form.description.label(class="form-label") }}
+                {{ form.description(class="form-control", rows=3, placeholder="Describe the expense...") }}
+            </div>
+        </div>
+        <hr class="my-4">
+        <div class="d-flex gap-2">
+            {{ form.submit(class="btn btn-primary") }}
+            <a href="{{ url_for('employee.expenses') }}" class="btn btn-outline-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

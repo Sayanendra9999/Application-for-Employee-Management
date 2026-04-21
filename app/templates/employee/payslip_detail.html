@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Payslip — {{ record.month }} {{ record.year }} — Enterprise Portal{% endblock %}
+{% block page_title %}Payslip Detail{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="{{ url_for('employee.payslips') }}" class="btn btn-outline-primary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Back to Payslips
+    </a>
+</div>
+
+<div class="form-card" style="max-width:700px;">
+    <div class="text-center mb-4">
+        <h5 class="fw-bold">Payslip — {{ record.month }} {{ record.year }}</h5>
+        <p style="color:var(--text-secondary); font-size:0.85rem;">{{ employee.user.full_name }} ({{ employee.emp_code }})</p>
+        <span class="badge-status badge-{{ record.status|lower }}">{{ record.status }}</span>
+    </div>
+
+    <hr>
+
+    <div class="row g-3 mb-3" style="font-size:0.9rem;">
+        <div class="col-6"><strong>Employee:</strong> {{ employee.user.full_name }}</div>
+        <div class="col-6"><strong>Code:</strong> {{ employee.emp_code }}</div>
+        <div class="col-6"><strong>Department:</strong> {{ employee.department_name }}</div>
+        <div class="col-6"><strong>Designation:</strong> {{ employee.designation_title }}</div>
+    </div>
+
+    <hr>
+
+    <table class="table" style="font-size:0.9rem;">
+        <tbody>
+            <tr><td class="fw-semibold">Basic Pay</td><td class="text-end">₹{{ '{:,.0f}'.format(record.basic) }}</td></tr>
+            <tr><td class="fw-semibold">HRA</td><td class="text-end">₹{{ '{:,.0f}'.format(record.hra) }}</td></tr>
+            <tr class="text-danger"><td class="fw-semibold">Deductions</td><td class="text-end">- ₹{{ '{:,.0f}'.format(record.deductions) }}</td></tr>
+        </tbody>
+        <tfoot>
+            <tr style="border-top:2px solid var(--text-primary);">
+                <td class="fw-bold" style="font-size:1.05rem;">Net Salary</td>
+                <td class="text-end fw-bold" style="font-size:1.05rem; color:var(--success);">₹{{ '{:,.0f}'.format(record.net_salary) }}</td>
+            </tr>
+        </tfoot>
+    </table>
+
+    <hr>
+    <div class="text-center">
+        <button onclick="window.print()" class="btn btn-outline-primary btn-sm">
+            <i class="fas fa-print me-1"></i>Print Payslip
+        </button>
+    </div>
+</div>
+{% endblock %}

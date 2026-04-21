@@ -265,3 +265,33 @@ CREATE TABLE IF NOT EXISTS employee_documents (
     uploaded_by INTEGER NOT NULL REFERENCES users(id),
     uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- EMPLOYEE SELF-SERVICE TABLES
+-- ═══════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS profile_update_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+    field_name VARCHAR(50) NOT NULL,
+    old_value VARCHAR(250) DEFAULT '',
+    new_value VARCHAR(250) NOT NULL,
+    status VARCHAR(20) DEFAULT 'Pending',
+    reviewed_by INTEGER REFERENCES users(id),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    reviewed_at DATETIME
+);
+
+CREATE TABLE IF NOT EXISTS employee_expenses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+    category VARCHAR(60) NOT NULL,
+    amount REAL NOT NULL,
+    date DATE,
+    description TEXT DEFAULT '',
+    receipt_filename VARCHAR(250) DEFAULT '',
+    receipt_original VARCHAR(250) DEFAULT '',
+    status VARCHAR(20) DEFAULT 'Pending',
+    reviewed_by INTEGER REFERENCES users(id),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);

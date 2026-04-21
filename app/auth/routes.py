@@ -7,6 +7,7 @@ from app.auth import bp
 from app.auth.forms import LoginForm, ChangePasswordForm
 from app.models import User
 from app.extensions import db
+from flask import jsonify
 
 
 @bp.route('/login', methods=['GET', 'POST'])
@@ -69,3 +70,23 @@ def change_password():
         return redirect(url_for('main_dashboard'))
 
     return render_template('change_password.html', form=form, forced=is_forced)
+
+
+@bp.route('/api/auth/forgot-password', methods=['POST'])
+def forgot_password():
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Invalid request payload.'}), 400
+        
+    user_input = data.get('identity')
+    if not user_input:
+        return jsonify({'error': 'Email or username is required.'}), 400
+        
+    # Check if user exists by email or username
+    user = User.query.filter((User.email == user_input) | (User.username == user_input)).first()
+    
+    if not user:
+        return jsonify({'error': 'No account found with that email or username.'}), 404
+        
+    # Mocking successful email sent
+    return jsonify({'message': 'Password reset link sent to your email.'}), 200

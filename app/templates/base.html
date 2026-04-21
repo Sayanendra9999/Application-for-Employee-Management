@@ -67,8 +67,28 @@
                 {% elif mod.slug == 'employee' %}
                 <a href="{{ url_for('employee.dashboard') }}" class="nav-link" id="nav-employee">
                     <i class="fas fa-user-circle"></i>
-                    <span>Employee Space</span>
+                    <span>My Space</span>
+                    {% if employee_unread_count is defined and employee_unread_count > 0 %}
+                    <span class="badge bg-danger ms-auto" style="font-size:0.65rem; padding:3px 6px; border-radius:10px;">{{ employee_unread_count }}</span>
+                    {% endif %}
                 </a>
+                <div style="padding-left:44px; margin-bottom:4px;">
+                    <a href="{{ url_for('employee.attendance') }}" class="nav-link" style="padding:5px 10px; font-size:0.8rem;">
+                        <i class="fas fa-clock" style="width:16px; font-size:0.75rem;"></i><span>Attendance</span>
+                    </a>
+                    <a href="{{ url_for('employee.my_leaves') }}" class="nav-link" style="padding:5px 10px; font-size:0.8rem;">
+                        <i class="fas fa-calendar-minus" style="width:16px; font-size:0.75rem;"></i><span>Leaves</span>
+                    </a>
+                    <a href="{{ url_for('employee.payslips') }}" class="nav-link" style="padding:5px 10px; font-size:0.8rem;">
+                        <i class="fas fa-file-invoice-dollar" style="width:16px; font-size:0.75rem;"></i><span>Payslips</span>
+                    </a>
+                    <a href="{{ url_for('employee.expenses') }}" class="nav-link" style="padding:5px 10px; font-size:0.8rem;">
+                        <i class="fas fa-receipt" style="width:16px; font-size:0.75rem;"></i><span>Expenses</span>
+                    </a>
+                    <a href="{{ url_for('employee.notifications') }}" class="nav-link" style="padding:5px 10px; font-size:0.8rem;">
+                        <i class="fas fa-bell" style="width:16px; font-size:0.75rem;"></i><span>Notifications</span>
+                    </a>
+                </div>
                 {% endif %}
             {% endfor %}
 

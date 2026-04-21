@@ -4,6 +4,7 @@
 
 {% block content %}
 <div class="row g-4">
+    <!-- Profile Card -->
     <div class="col-lg-4">
         <div class="data-card">
             <div class="p-4 text-center">
@@ -18,22 +19,38 @@
                 <hr>
                 <div style="font-size:0.85rem; text-align:left;">
                     <div class="mb-2"><strong>Employee Code:</strong> {{ employee.emp_code }}</div>
-                    <div class="mb-2"><strong>Department:</strong> {{ employee.department or '—' }}</div>
-                    <div class="mb-2"><strong>Designation:</strong> {{ employee.designation or '—' }}</div>
+                    <div class="mb-2"><strong>Department:</strong> {{ employee.department_name }}</div>
+                    <div class="mb-2"><strong>Designation:</strong> {{ employee.designation_title }}</div>
                     <div class="mb-2"><strong>Joined:</strong> {{ employee.date_of_joining.strftime('%d %b %Y') if employee.date_of_joining else '—' }}</div>
+                    <div class="mb-2"><strong>Phone:</strong> {{ current_user.phone or '—' }}</div>
                     <div class="mb-2"><strong>PAN:</strong> {{ employee.pan_number or '—' }}</div>
+                    <div class="mb-2"><strong>Bank A/C:</strong> {{ employee.bank_account or '—' }}</div>
                 </div>
                 {% endif %}
             </div>
         </div>
+
+        {% if employee %}
+        <div class="data-card mt-4">
+            <div class="card-header">
+                <h5><i class="fas fa-shield-halved me-2"></i>Request Sensitive Update</h5>
+            </div>
+            <div class="p-4">
+                <p style="font-size:0.82rem; color:var(--text-secondary);">Changes to bank details or PAN require HR approval.</p>
+                <a href="{{ url_for('employee.profile_update_request') }}" class="btn btn-outline-primary btn-sm w-100">
+                    <i class="fas fa-pen-to-square me-1"></i>Request Update
+                </a>
+            </div>
+        </div>
+        {% endif %}
     </div>
 
+    <!-- Edit Form + Update Requests -->
     <div class="col-lg-8">
         <div class="form-card" style="max-width:100%;">
-            <h5 class="fw-bold mb-4">Update Profile</h5>
+            <h5 class="fw-bold mb-4"><i class="fas fa-user-edit me-2" style="color:var(--primary);"></i>Update Profile</h5>
             <form method="POST" novalidate>
                 {{ form.hidden_tag() }}
-
                 <div class="row g-3">
                     <div class="col-md-6">
                         {{ form.full_name.label(class="form-label") }}
@@ -44,11 +61,33 @@
                         {{ form.phone(class="form-control", placeholder="+91 98765 43210") }}
                     </div>
                 </div>
-
                 <hr class="my-4">
                 {{ form.submit(class="btn btn-primary") }}
             </form>
         </div>
+
+        {% if update_requests %}
+        <div class="data-card mt-4">
+            <div class="card-header">
+                <h5><i class="fas fa-clock-rotate-left me-2"></i>Profile Update Requests</h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table">
+                    <thead><tr><th>Field</th><th>Requested Value</th><th>Status</th><th>Date</th></tr></thead>
+                    <tbody>
+                        {% for req in update_requests %}
+                        <tr>
+                            <td class="fw-semibold">{{ req.field_name.replace('_', ' ').title() }}</td>
+                            <td>{{ req.new_value }}</td>
+                            <td><span class="badge-status badge-{{ req.status|lower }}">{{ req.status }}</span></td>
+                            <td>{{ req.created_at.strftime('%d %b %Y') }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

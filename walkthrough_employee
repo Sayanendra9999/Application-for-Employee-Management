@@ -1,0 +1,69 @@
+# Employee Module Upgrade — Walkthrough
+
+I have successfully upgraded the **Employee Self-Service Module** into a production-level portal. The module now has a rich set of features allowing employees to view and manage their data without direct write access to sensitive administrative modules (HR, Finance, Admin).
+
+## Architecture Overview
+
+The Employee module now uses a clean service-oriented architecture:
+- **`app/employee/services.py`**: Contains all business logic and orchestrates data access from the current employee's perspective.
+- **`app/employee/schemas.py`**: Input validation and formatting utilities.
+- **`app/employee/utils.py`**: Helper functions for unified auditing and notification creation.
+- **`app/employee/routes.py`**: Expanded to 24 RESTful endpoints, acting simply as controllers relying on the service layer.
+- **`app/employee/forms.py`**: Enhanced with WTForms for robust validation.
+
+## Key Features Implemented
+
+1. **Rich Dashboard**
+   - Live check-in / check-out actions.
+   - Quick stats (pending tasks, completed tasks, pending leaves, unread notifications).
+   - Real-time leave balance progress bars.
+   - Recent notifications and tasks previews.
+
+2. **Profile Management**
+   - Editable basic info (Name, Phone).
+   - **Profile Update Requests**: Employees can submit requests to change sensitive fields (Bank Account, PAN). These enter a `Pending` state for HR review.
+
+3. **Attendance & Leaves**
+   - Full attendance history and monthly summary stats (Present, Late, Absent, Hours Worked).
+   - Comprehensive leave history with filtering.
+   - Detailed leave balance breakdowns against Admin-defined policies.
+   - Streamlined leave request form.
+
+4. **Finance Integration**
+   - Read-only access to processed salary records and printable payslip details.
+   - **Expense Claims**: Employees can submit reimbursement requests with receipt uploads, generating `EmployeeExpense` records.
+
+5. **Project & Task Management**
+   - Read-only view of assigned projects with visual progress bars and delay indicators.
+   - Comprehensive list of assigned tasks with priority badges and overdue warnings.
+
+6. **Communication & Documents**
+   - Centralized document center to download HR-uploaded files.
+   - Notifications hub with "Mark as Read" functionality (integrated into the sidebar badge).
+   - Read-only access to performance reviews.
+
+## Database Additions
+
+Two new models were added to facilitate the self-service flow:
+- `ProfileUpdateRequest`: Tracks requested changes to sensitive profile data.
+- `EmployeeExpense`: Tracks reimbursement claims submitted by employees.
+
+Both models include a `status` field (`Pending`, `Approved`, `Rejected`) and relate back to the `Employee` and `User` (reviewer) tables. `schema.sql` was updated accordingly.
+
+## Integration Points
+
+The Employee module securely consumes data from other modules:
+- **HR**: Reads `Attendance`, `Leave`, `LeaveBalance`, `EmployeeDocument`, `PerformanceReview`. (Uses `hr.services` for complex operations like check-in).
+- **Finance**: Reads `SalaryRecord`.
+- **PM**: Reads `ProjectMember`, `Project`, `Task`.
+- **Admin**: Reads `LeavePolicy`, `AttendanceRule`.
+
+The only direct writes to non-employee tables are for `Leave`, `Attendance` (via check-in/out), and `Notification` / `AuditLog`.
+
+## Verification Details
+- **Seed Data**: Updated `seed_data.py` to populate `EmployeeExpense` and `ProfileUpdateRequest` records. Successfully executed to verify the schema.
+- **Context Processor**: The main sidebar now dynamically updates the notification badge using a context processor added in `app/__init__.py`.
+- **UI/UX**: Templates fully use the modern Bootstrap 5 + custom CSS design system established in the application.
+
+> [!NOTE]
+> The app server can be started manually to explore these features using the seeded test accounts (e.g., `john_doe` / `john123`).

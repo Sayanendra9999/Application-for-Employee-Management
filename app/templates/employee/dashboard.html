@@ -1,13 +1,49 @@
 {% extends "base.html" %}
 {% block title %}My Dashboard — Enterprise Portal{% endblock %}
-{% block page_title %}My Dashboard{% endblock %}
+{% block page_title %}Employee Dashboard{% endblock %}
 
 {% block content %}
 <div class="mb-4">
     <h2 style="font-weight:800; font-size:1.4rem;">Hello, {{ current_user.full_name }} 👋</h2>
-    <p style="color:var(--text-secondary); font-size:0.9rem;">Here's your personal overview</p>
+    <p style="color:var(--text-secondary); font-size:0.9rem;">Welcome to your self-service portal</p>
 </div>
 
+<!-- Attendance Quick Action -->
+{% if employee %}
+<div class="data-card mb-4" style="border-left: 4px solid var(--primary);">
+    <div class="p-4">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+            <div>
+                <h6 class="fw-bold mb-1"><i class="fas fa-clock me-2" style="color:var(--primary);"></i>Today's Attendance</h6>
+                {% if today_att and today_att.check_in %}
+                    <span style="font-size:0.85rem; color:var(--text-secondary);">
+                        Checked in at <strong>{{ today_att.check_in }}</strong>
+                        {% if today_att.check_out %} · Out at <strong>{{ today_att.check_out }}</strong> · {{ today_att.working_hours }}h{% endif %}
+                    </span>
+                    <span class="badge-status badge-{{ today_att.status|lower|replace(' ', '') }} ms-2">{{ today_att.status }}</span>
+                {% else %}
+                    <span style="font-size:0.85rem; color:var(--text-secondary);">You haven't checked in yet today</span>
+                {% endif %}
+            </div>
+            <div class="d-flex gap-2">
+                {% if not today_att or not today_att.check_in %}
+                <form method="POST" action="{{ url_for('employee.attendance_checkin') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-sign-in-alt me-1"></i>Check In</button>
+                </form>
+                {% elif not today_att.check_out %}
+                <form method="POST" action="{{ url_for('employee.attendance_checkout') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-outline-primary btn-sm"><i class="fas fa-sign-out-alt me-1"></i>Check Out</button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Stats Cards -->
 <div class="row g-4 mb-4">
     <div class="col-sm-6 col-xl-3">
         <div class="stat-card purple">
@@ -25,82 +61,136 @@
     </div>
     <div class="col-sm-6 col-xl-3">
         <div class="stat-card orange">
-            <div class="stat-icon"><i class="fas fa-clock"></i></div>
+            <div class="stat-icon"><i class="fas fa-calendar-minus"></i></div>
             <div class="stat-value">{{ pending_leaves }}</div>
             <div class="stat-label">Leaves Pending</div>
         </div>
     </div>
     <div class="col-sm-6 col-xl-3">
         <div class="stat-card blue">
-            <div class="stat-icon"><i class="fas fa-building"></i></div>
-            <div class="stat-value">{{ employee.department if employee else '—' }}</div>
-            <div class="stat-label">Department</div>
+            <div class="stat-icon"><i class="fas fa-bell"></i></div>
+            <div class="stat-value">{{ unread_count }}</div>
+            <div class="stat-label">Unread Notifications</div>
         </div>
     </div>
 </div>
 
-<!-- Quick Links -->
 <div class="row g-4">
-    <div class="col-lg-6">
+    <!-- Quick Actions -->
+    <div class="col-lg-4">
         <div class="data-card">
             <div class="card-header">
                 <h5><i class="fas fa-rocket me-2"></i>Quick Actions</h5>
             </div>
             <div class="p-4">
                 <div class="d-grid gap-2">
-                    <a href="{{ url_for('employee.my_tasks') }}" class="btn btn-outline-primary text-start">
-                        <i class="fas fa-tasks me-2"></i>Employee Tasks
-                    </a>
-                    <a href="{{ url_for('employee.my_leaves') }}" class="btn btn-outline-primary text-start">
-                        <i class="fas fa-calendar-minus me-2"></i>Employee Leaves
-                    </a>
                     <a href="{{ url_for('employee.request_leave') }}" class="btn btn-outline-primary text-start">
-                        <i class="fas fa-plus me-2"></i>Request Leave
+                        <i class="fas fa-calendar-plus me-2"></i>Request Leave
+                    </a>
+                    <a href="{{ url_for('employee.submit_expense') }}" class="btn btn-outline-primary text-start">
+                        <i class="fas fa-receipt me-2"></i>Submit Expense
+                    </a>
+                    <a href="{{ url_for('employee.payslips') }}" class="btn btn-outline-primary text-start">
+                        <i class="fas fa-file-invoice-dollar me-2"></i>View Payslips
+                    </a>
+                    <a href="{{ url_for('employee.documents') }}" class="btn btn-outline-primary text-start">
+                        <i class="fas fa-folder-open me-2"></i>My Documents
                     </a>
                     <a href="{{ url_for('employee.profile') }}" class="btn btn-outline-primary text-start">
-                        <i class="fas fa-user-circle me-2"></i>My Profile
+                        <i class="fas fa-user-edit me-2"></i>My Profile
                     </a>
                 </div>
             </div>
         </div>
     </div>
-    <div class="col-lg-6">
+
+    <!-- Leave Balances -->
+    <div class="col-lg-4">
         <div class="data-card">
             <div class="card-header">
-                <h5><i class="fas fa-list-check me-2"></i>Recent Tasks</h5>
-                <a href="{{ url_for('employee.my_tasks') }}" class="btn btn-outline-primary btn-sm">View All</a>
+                <h5><i class="fas fa-calendar-check me-2"></i>Leave Balance</h5>
+                <a href="{{ url_for('employee.leave_balance') }}" class="btn btn-outline-primary btn-sm">Details</a>
             </div>
-            <div class="table-responsive">
-                <table class="table">
-                    <thead><tr><th>Task</th><th>Priority</th><th>Status</th></tr></thead>
-                    <tbody>
-                        {% for task in my_tasks[:5] %}
-                        <tr>
-                            <td class="fw-semibold">{{ task.title }}</td>
-                            <td><span class="badge-status badge-{{ task.priority | lower }}">{{ task.priority }}</span></td>
-                            <td><span class="badge-status badge-{{ task.status | lower | replace(' ', '') }}">{{ task.status }}</span></td>
-                        </tr>
-                        {% else %}
-                        <tr><td colspan="3" class="text-center py-3" style="color:var(--text-secondary);">No tasks assigned</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+            <div class="p-4">
+                {% for bal in leave_balances %}
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-1" style="font-size:0.85rem;">
+                        <span class="fw-semibold">{{ bal.leave_type }}</span>
+                        <span style="color:var(--text-secondary);">{{ bal.remaining }} / {{ bal.total_allocated }}</span>
+                    </div>
+                    <div class="progress" style="height:6px;">
+                        {% set pct = ((bal.remaining / bal.total_allocated) * 100) if bal.total_allocated > 0 else 0 %}
+                        <div class="progress-bar bg-{% if pct > 50 %}success{% elif pct > 20 %}warning{% else %}danger{% endif %}"
+                             style="width: {{ pct }}%"></div>
+                    </div>
+                </div>
+                {% else %}
+                <p style="color:var(--text-secondary); font-size:0.85rem;">No leave balances found</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Notifications -->
+    <div class="col-lg-4">
+        <div class="data-card">
+            <div class="card-header">
+                <h5><i class="fas fa-bell me-2"></i>Notifications</h5>
+                <a href="{{ url_for('employee.notifications') }}" class="btn btn-outline-primary btn-sm">View All</a>
+            </div>
+            <div class="p-3">
+                {% for notif in notifications %}
+                <div class="d-flex align-items-start gap-2 p-2 rounded mb-1 {% if not notif.is_read %}{% endif %}"
+                     style="font-size:0.83rem; {% if not notif.is_read %}background:rgba(99,102,241,0.06);{% endif %}">
+                    <i class="fas fa-{% if notif.category == 'success' %}check-circle text-success{% elif notif.category == 'warning' %}exclamation-triangle text-warning{% elif notif.category == 'danger' %}times-circle text-danger{% else %}info-circle text-primary{% endif %} mt-1" style="font-size:0.75rem;"></i>
+                    <div>
+                        <div class="fw-semibold">{{ notif.title }}</div>
+                        <div style="color:var(--text-secondary); font-size:0.78rem;">{{ notif.message[:60] }}{% if notif.message|length > 60 %}…{% endif %}</div>
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-center py-3" style="color:var(--text-secondary); font-size:0.85rem;">No notifications</p>
+                {% endfor %}
             </div>
         </div>
     </div>
 </div>
 
-{% if employee %}
+<!-- Recent Tasks -->
 <div class="data-card mt-4">
     <div class="card-header">
-        <h5><i class="fas fa-id-card me-2"></i>Employee Info</h5>
+        <h5><i class="fas fa-tasks me-2"></i>My Tasks</h5>
+        <a href="{{ url_for('employee.my_tasks') }}" class="btn btn-outline-primary btn-sm">View All</a>
     </div>
+    <div class="table-responsive">
+        <table class="table">
+            <thead><tr><th>Task</th><th>Project</th><th>Priority</th><th>Status</th><th>Due Date</th></tr></thead>
+            <tbody>
+                {% for task in tasks %}
+                <tr>
+                    <td class="fw-semibold">{{ task.title }}</td>
+                    <td>{{ task.project.name }}</td>
+                    <td><span class="badge-status badge-{{ task.priority|lower }}">{{ task.priority }}</span></td>
+                    <td><span class="badge-status badge-{{ task.status|lower|replace(' ', '') }}">{{ task.status }}</span></td>
+                    <td>{{ task.due_date.strftime('%d %b %Y') if task.due_date else '—' }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="text-center py-3" style="color:var(--text-secondary);">No tasks assigned</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if employee %}
+<div class="data-card mt-4">
+    <div class="card-header"><h5><i class="fas fa-id-card me-2"></i>Employee Info</h5></div>
     <div class="p-4">
         <div class="row g-3" style="font-size:0.9rem;">
-            <div class="col-md-4"><strong>Employee Code:</strong> {{ employee.emp_code }}</div>
-            <div class="col-md-4"><strong>Department:</strong> {{ employee.department or '—' }}</div>
-            <div class="col-md-4"><strong>Designation:</strong> {{ employee.designation or '—' }}</div>
-            <div class="col-md-4"><strong>Date of Joining:</strong> {{ employee.date_of_joining.strftime('%d %b %Y') if employee.date_of_joining else '—' }}</div>
+            <div class="col-md-3"><strong>Employee Code:</strong> {{ employee.emp_code }}</div>
+            <div class="col-md-3"><strong>Department:</strong> {{ employee.department_name }}</div>
+            <div class="col-md-3"><strong>Designation:</strong> {{ employee.designation_title }}</div>
+            <div class="col-md-3"><strong>Date of Joining:</strong> {{ employee.date_of_joining.strftime('%d %b %Y') if employee.date_of_joining else '—' }}</div>
         </div>
     </div>
 </div>

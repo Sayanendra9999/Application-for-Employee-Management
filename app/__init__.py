@@ -91,12 +91,17 @@ def create_app(config_class=Config):
     def inject_modules():
         """Make user's permitted modules available in all templates."""
         if current_user.is_authenticated:
-            from app.models import Module
+            from app.models import Module, Notification
             if current_user.is_admin:
                 user_modules = Module.query.order_by(Module.name).all()
             else:
                 user_modules = current_user.modules
-            return dict(user_modules=user_modules)
-        return dict(user_modules=[])
+            # Unread notification count for sidebar badge
+            employee_unread_count = Notification.query.filter_by(
+                user_id=current_user.id, is_read=False
+            ).count()
+            return dict(user_modules=user_modules,
+                        employee_unread_count=employee_unread_count)
+        return dict(user_modules=[], employee_unread_count=0)
 
     return app
