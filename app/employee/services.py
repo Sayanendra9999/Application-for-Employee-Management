@@ -445,3 +445,48 @@ def get_my_tasks(user_id, status=None):
     except Exception as e:
         logger.error(f'Error fetching tasks: {e}')
         return []
+
+
+def update_task_status(user_id, task_id, new_status, ip=''):
+    """Update task status (Pending -> In Progress -> Done) for an assigned task."""
+    try:
+        task = Task.query.filter_by(id=task_id, assigned_to=user_id).first()
+        if not task:
+            return False, "Task not found or you are not assigned to it."
+        
+        allowed_transitions = {
+            'Pending': ['In Progress', 'Done'],
+            'In Progress': ['Pending', 'Done'],
+            'Done': ['In Progress', 'Pending'] # Option to revert if needed, or we restrict it? The prompt says "predefined options: Pending -> In Progress -> Done" - we'll allow standard options.
+        }
+        
+        valid_statuses = ['Pending', 'In Progress', 'Done']
+        if new_status not in valid_statuses:
+            return False, "Invalid status update requested."
+            
+        old_status = task.status
+        if old_status == new_status:
+            return False, "Task is already in that status."
+            
+        task.status = new_status
+        task.updated_at = datetime.utcnow()
+        
+        log_employee_action('UPDATE', 'Task', task.id,
+                          f'Updated task status from {old_status} to {new_status}', ip)
+                          
+        # Notify Project PM
+        project = task.project
+        create_notification(
+            project.created_by,
+            'Task Updated',
+            f'Task "{task.title}" status changed to {new_status}.',
+            category='info',
+            link=f'/pm/projects/{project.id}'
+        )
+        
+        logger.info(f'Task #{task.id} status updated to {new_status} by emp#{user_id}')
+        return True, f'Task status updated to {new_status}.'
+    except Exception as e:
+        logger.error(f'Error updating task status: {e}')
+        return False, 'An error occurred while updating the task status.'
+

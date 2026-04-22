@@ -51,6 +51,7 @@ def dashboard():
 
     recent_leaves = Leave.query.order_by(Leave.created_at.desc()).limit(5).all()
     rules = services.get_attendance_rules()
+    unassigned_count = services.get_unassigned_count()
 
     return render_template('hr/dashboard.html',
                            total_employees=total_employees,
@@ -61,7 +62,8 @@ def dashboard():
                            today_absent=today_absent,
                            dept_stats=dept_stats,
                            recent_leaves=recent_leaves,
-                           rules=rules)
+                           rules=rules,
+                           unassigned_count=unassigned_count)
 
 
 # ===========================================================================
@@ -73,6 +75,7 @@ def employees():
     # Optional department filter
     dept_id = request.args.get('department', type=int)
     search = request.args.get('search', '').strip()
+    status_filter = request.args.get('status', '').strip()
 
     query = Employee.query
     if dept_id:
@@ -86,57 +89,20 @@ def employees():
         )
 
     all_employees = query.order_by(Employee.emp_code).all()
+
+    # Apply status filter in-memory (no schema change)
+    if status_filter == 'unassigned':
+        all_employees = [e for e in all_employees if not services.is_employee_profile_complete(e)]
+    elif status_filter == 'assigned':
+        all_employees = [e for e in all_employees if services.is_employee_profile_complete(e)]
+
     departments = Department.query.filter_by(is_active=True).order_by(Department.name).all()
+    unassigned_count = services.get_unassigned_count()
     return render_template('hr/employees.html', employees=all_employees,
-                           departments=departments, selected_dept=dept_id, search=search)
-
-
-@bp.route('/employees/add', methods=['GET', 'POST'])
-@module_required('hr')
-def add_employee():
-    form = EmployeeForm()
-    form.department_id.choices = [(0, '— Select Department —')] + services.get_departments_for_dropdown()
-    form.designation_id.choices = [(0, '— Select Designation —')] + services.get_designations_for_dropdown()
-
-    # Get users without an employee profile
-    users_without_profile = User.query.filter(
-        ~User.id.in_(db.session.query(Employee.user_id))
-    ).order_by(User.full_name).all()
-
-    if form.validate_on_submit():
-        user_id = request.form.get('user_id')
-        if not user_id:
-            flash('Please select a user.', 'danger')
-            return render_template('hr/employee_form.html', form=form,
-                                   users=users_without_profile, title='Add Employee')
-        if Employee.query.filter_by(emp_code=form.emp_code.data).first():
-            flash('Employee code already exists.', 'danger')
-            return render_template('hr/employee_form.html', form=form,
-                                   users=users_without_profile, title='Add Employee')
-
-        emp = Employee(
-            user_id=int(user_id),
-            emp_code=form.emp_code.data,
-            department_id=form.department_id.data if form.department_id.data != 0 else None,
-            designation_id=form.designation_id.data if form.designation_id.data != 0 else None,
-            date_of_joining=form.date_of_joining.data,
-            salary=form.salary.data or 0,
-            bank_account=form.bank_account.data or '',
-            pan_number=form.pan_number.data or ''
-        )
-        db.session.add(emp)
-        db.session.flush()
-
-        # Initialize leave balances from Admin policies
-        services.initialize_leave_balances(emp.id)
-
-        services.log_audit(current_user.id, 'CREATE', 'Employee', emp.id,
-                          f'Created employee {emp.emp_code}', request.remote_addr or '')
-        db.session.commit()
-        flash(f'Employee {emp.emp_code} created with leave balances initialized.', 'success')
-        return redirect(url_for('hr.employees'))
-    return render_template('hr/employee_form.html', form=form,
-                           users=users_without_profile, title='Add Employee')
+                           departments=departments, selected_dept=dept_id,
+                           search=search, status_filter=status_filter,
+                           unassigned_count=unassigned_count,
+                           is_profile_complete=services.is_employee_profile_complete)
 
 
 @bp.route('/employees/<int:emp_id>/edit', methods=['GET', 'POST'])
@@ -148,13 +114,7 @@ def edit_employee(emp_id):
     form.designation_id.choices = [(0, '— Select Designation —')] + services.get_designations_for_dropdown()
 
     if form.validate_on_submit():
-        existing = Employee.query.filter(Employee.emp_code == form.emp_code.data,
-                                         Employee.id != emp.id).first()
-        if existing:
-            flash('Employee code already taken.', 'danger')
-            return render_template('hr/employee_form.html', form=form,
-                                   title='Edit Employee', employee=emp)
-        emp.emp_code = form.emp_code.data
+        # emp_code is system-assigned by Admin and immutable — not updated here
         emp.department_id = form.department_id.data if form.department_id.data != 0 else None
         emp.designation_id = form.designation_id.data if form.designation_id.data != 0 else None
         emp.date_of_joining = form.date_of_joining.data
@@ -191,6 +151,83 @@ def employee_detail(emp_id):
 def api_designations(dept_id):
     desigs = services.get_designations_for_department(dept_id)
     return jsonify(desigs)
+
+
+# ===========================================================================
+# UNASSIGNED EMPLOYEES / ONBOARDING
+# ===========================================================================
+@bp.route('/employees/unassigned')
+@module_required('hr')
+def unassigned_employees():
+    """List employees with incomplete profiles awaiting HR onboarding."""
+    unassigned = services.get_unassigned_employees()
+    # Attach missing field info to each employee for template use
+    emp_info = []
+    for emp in unassigned:
+        emp_info.append({
+            'employee': emp,
+            'missing': services.get_missing_fields(emp)
+        })
+    return render_template('hr/unassigned_employees.html',
+                           emp_info=emp_info,
+                           unassigned_count=len(unassigned))
+
+
+@bp.route('/employees/<int:emp_id>/complete-profile', methods=['GET', 'POST'])
+@module_required('hr')
+def complete_profile(emp_id):
+    """HR fills in missing details for an unassigned employee."""
+    emp = Employee.query.get_or_404(emp_id)
+    form = EmployeeForm(obj=emp)
+    form.department_id.choices = [(0, '— Select Department —')] + services.get_departments_for_dropdown()
+    form.designation_id.choices = [(0, '— Select Designation —')] + services.get_designations_for_dropdown()
+
+    missing = services.get_missing_fields(emp)
+
+    if form.validate_on_submit():
+        success, msg = services.complete_employee_profile(
+            emp,
+            department_id=form.department_id.data,
+            designation_id=form.designation_id.data,
+            salary=form.salary.data,
+            bank_account=form.bank_account.data,
+            pan_number=form.pan_number.data,
+            date_of_joining=form.date_of_joining.data
+        )
+        if success:
+            # emp_code is system-assigned by Admin — not modified here
+
+            # Initialize leave balances if not already done
+            services.initialize_leave_balances(emp.id)
+
+            services.log_audit(current_user.id, 'COMPLETE_PROFILE', 'Employee', emp.id,
+                              f'Completed profile for {emp.emp_code}', request.remote_addr or '')
+            db.session.commit()
+            flash(msg, 'success')
+            return redirect(url_for('hr.employee_detail', emp_id=emp.id))
+        else:
+            flash(msg, 'danger')
+
+    return render_template('hr/complete_profile.html', form=form,
+                           employee=emp, missing=missing,
+                           title='Complete Employee Profile')
+
+
+@bp.route('/api/employee/<int:emp_id>/profile-status')
+@module_required('hr')
+def api_profile_status(emp_id):
+    """API: Check if an employee's profile is complete."""
+    emp = Employee.query.get(emp_id)
+    if not emp:
+        return jsonify({'error': 'Employee not found'}), 404
+    complete = services.is_employee_profile_complete(emp)
+    missing = services.get_missing_fields(emp) if not complete else []
+    return jsonify({
+        'employee_id': emp.id,
+        'emp_code': emp.emp_code,
+        'is_complete': complete,
+        'missing_fields': missing
+    })
 
 
 # ===========================================================================

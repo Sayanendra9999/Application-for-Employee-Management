@@ -64,6 +64,7 @@
                     <th>Role</th>
                     <th>Modules</th>
                     <th>Status</th>
+                    <th>HR Status</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -91,6 +92,21 @@
                         <span class="badge-status badge-approved">Active</span>
                         {% else %}
                         <span class="badge-status badge-rejected">Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if user.employee %}
+                            {% if is_profile_complete(user.employee) %}
+                            <span class="badge" style="background:#d1fae5; color:#065f46; font-size:0.7rem; padding:3px 8px; border-radius:6px;">
+                                <i class="fas fa-check-circle me-1"></i>Onboarded
+                            </span>
+                            {% else %}
+                            <span class="badge" style="background:#fef3c7; color:#92400e; font-size:0.7rem; padding:3px 8px; border-radius:6px;">
+                                <i class="fas fa-clock me-1"></i>Pending HR
+                            </span>
+                            {% endif %}
+                        {% else %}
+                        <span style="color:var(--text-secondary); font-size:0.75rem;">—</span>
                         {% endif %}
                     </td>
                     <td>

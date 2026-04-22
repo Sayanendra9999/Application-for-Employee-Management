@@ -13,31 +13,58 @@
 </div>
 {% endif %}
 
+<!-- Dashboard Header Actions -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 style="font-weight:700; margin:0;">Dashboard Overview</h4>
+    <a href="{{ url_for('pm.add_project') }}" class="btn btn-primary shadow-sm" id="btn-new-project-dashboard">
+        <i class="fas fa-plus me-2"></i>New Project
+    </a>
+</div>
+
+<style>
+.stat-card.clickable {
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.stat-card.clickable:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+}
+</style>
+
 <!-- Stats Row 1: Projects -->
+{% set not_started_projects = total_projects - (active_projects + completed_projects + on_hold_projects) %}
 <div class="row g-4 mb-4">
-    <div class="col-sm-6 col-xl-3">
-        <div class="stat-card purple" id="stat-total-projects">
+    <div class="col-sm-6 col-md-4 col-xl">
+        <div class="stat-card purple clickable" id="stat-total-projects" onclick="window.location.href='{{ url_for('pm.projects') }}'">
             <div class="stat-icon"><i class="fas fa-folder-open"></i></div>
             <div class="stat-value">{{ total_projects }}</div>
             <div class="stat-label">Total Projects</div>
         </div>
     </div>
-    <div class="col-sm-6 col-xl-3">
-        <div class="stat-card green" id="stat-active-projects">
+    <div class="col-sm-6 col-md-4 col-xl">
+        <div class="stat-card secondary clickable" style="background-color:#6c757d; color:white;" id="stat-not-started-projects" onclick="window.location.href='{{ url_for('pm.projects', status='Not Started') }}'">
+            <div class="stat-icon"><i class="fas fa-hourglass-start"></i></div>
+            <div class="stat-value">{{ not_started_projects }}</div>
+            <div class="stat-label">Not Started</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-md-4 col-xl">
+        <div class="stat-card green clickable" id="stat-active-projects" onclick="window.location.href='{{ url_for('pm.projects', status='In Progress') }}'">
             <div class="stat-icon"><i class="fas fa-bolt"></i></div>
             <div class="stat-value">{{ active_projects }}</div>
             <div class="stat-label">Active Projects</div>
         </div>
     </div>
-    <div class="col-sm-6 col-xl-3">
-        <div class="stat-card teal" id="stat-completed-projects">
+    <div class="col-sm-6 col-md-4 col-xl">
+        <div class="stat-card teal clickable" id="stat-completed-projects" onclick="window.location.href='{{ url_for('pm.projects', status='Completed') }}'">
             <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
             <div class="stat-value">{{ completed_projects }}</div>
             <div class="stat-label">Completed</div>
         </div>
     </div>
-    <div class="col-sm-6 col-xl-3">
-        <div class="stat-card orange" id="stat-onhold-projects">
+    <div class="col-sm-6 col-md-4 col-xl">
+        <div class="stat-card orange clickable" id="stat-onhold-projects" onclick="window.location.href='{{ url_for('pm.projects', status='On Hold') }}'">
             <div class="stat-icon"><i class="fas fa-pause-circle"></i></div>
             <div class="stat-value">{{ on_hold_projects }}</div>
             <div class="stat-label">On Hold</div>
@@ -48,28 +75,28 @@
 <!-- Stats Row 2: Tasks & Milestones -->
 <div class="row g-4 mb-4">
     <div class="col-sm-6 col-xl-3">
-        <div class="stat-card blue" id="stat-pending-tasks">
+        <div class="stat-card blue clickable" id="stat-pending-tasks" onclick="window.location.href='{{ url_for('pm.projects', ext_filter='pending_tasks') }}'">
             <div class="stat-icon"><i class="fas fa-clock"></i></div>
             <div class="stat-value">{{ pending_tasks }}</div>
             <div class="stat-label">Pending Tasks</div>
         </div>
     </div>
     <div class="col-sm-6 col-xl-3">
-        <div class="stat-card teal" id="stat-done-tasks">
+        <div class="stat-card teal clickable" id="stat-done-tasks" onclick="window.location.href='{{ url_for('pm.projects', ext_filter='tasks_done') }}'">
             <div class="stat-icon"><i class="fas fa-check-double"></i></div>
             <div class="stat-value">{{ tasks_done }}</div>
             <div class="stat-label">Tasks Completed</div>
         </div>
     </div>
     <div class="col-sm-6 col-xl-3">
-        <div class="stat-card pink" id="stat-overdue-tasks">
+        <div class="stat-card pink clickable" id="stat-overdue-tasks" onclick="window.location.href='{{ url_for('pm.projects', ext_filter='overdue_tasks') }}'">
             <div class="stat-icon"><i class="fas fa-exclamation-triangle"></i></div>
             <div class="stat-value">{{ overdue_tasks }}</div>
             <div class="stat-label">Overdue Tasks</div>
         </div>
     </div>
     <div class="col-sm-6 col-xl-3">
-        <div class="stat-card purple" id="stat-milestones">
+        <div class="stat-card purple clickable" id="stat-milestones" onclick="window.location.href='{{ url_for('pm.projects', ext_filter='milestones_done') }}'">
             <div class="stat-icon"><i class="fas fa-flag-checkered"></i></div>
             <div class="stat-value">{{ completed_milestones }}/{{ total_milestones }}</div>
             <div class="stat-label">Milestones Done</div>
@@ -105,11 +132,12 @@
                     <td><span class="badge-status badge-{{ p.status | lower | replace(' ', '-') }}">{{ p.status }}</span></td>
                     <td>
                         <div class="d-flex align-items-center gap-2">
+                            {% set calculated_progress = 100 if p.status == 'Completed' and p.tasks.count() == 0 else p.progress %}
                             <div class="progress" style="width:80px; height:6px;">
-                                <div class="progress-bar {% if p.progress == 100 %}bg-success{% elif p.progress > 50 %}bg-primary{% elif p.progress > 0 %}bg-warning{% else %}bg-secondary{% endif %}"
-                                     style="width:{{ p.progress }}%" role="progressbar"></div>
+                                <div class="progress-bar {% if calculated_progress == 100 %}bg-success{% elif calculated_progress > 50 %}bg-primary{% elif calculated_progress > 0 %}bg-warning{% else %}bg-secondary{% endif %}"
+                                     style="width:{{ calculated_progress }}%" role="progressbar"></div>
                             </div>
-                            <small class="text-muted">{{ p.progress }}%</small>
+                            <small class="text-muted">{{ calculated_progress }}%</small>
                         </div>
                     </td>
                     <td>

@@ -67,7 +67,7 @@
                 {% elif mod.slug == 'employee' %}
                 <a href="{{ url_for('employee.dashboard') }}" class="nav-link" id="nav-employee">
                     <i class="fas fa-user-circle"></i>
-                    <span>My Space</span>
+                    <span>Employee Space</span>
                     {% if employee_unread_count is defined and employee_unread_count > 0 %}
                     <span class="badge bg-danger ms-auto" style="font-size:0.65rem; padding:3px 6px; border-radius:10px;">{{ employee_unread_count }}</span>
                     {% endif %}

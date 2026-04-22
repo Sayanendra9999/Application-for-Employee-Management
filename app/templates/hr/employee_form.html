@@ -28,7 +28,8 @@
         <div class="row g-3">
             <div class="col-md-6">
                 {{ form.emp_code.label(class="form-label") }}
-                {{ form.emp_code(class="form-control", placeholder="EMP001") }}
+                {{ form.emp_code(class="form-control", readonly=true) }}
+                <small class="text-muted">System-assigned by Admin (read-only)</small>
             </div>
             <div class="col-md-6">
                 {{ form.department_id.label(class="form-label") }}

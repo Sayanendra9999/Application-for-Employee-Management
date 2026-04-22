@@ -44,13 +44,14 @@
             </div>
         </div>
         <!-- Progress Bar -->
+        {% set calculated_progress = 100 if project.status == 'Completed' and project.tasks.count() == 0 else progress %}
         <div class="d-flex align-items-center gap-3">
             <strong style="font-size:0.88rem;">Progress:</strong>
             <div class="progress flex-grow-1" style="height:10px; max-width:400px;">
-                <div class="progress-bar {% if progress == 100 %}bg-success{% elif progress > 50 %}bg-primary{% elif progress > 0 %}bg-warning{% else %}bg-secondary{% endif %}"
-                     style="width:{{ progress }}%" role="progressbar"></div>
+                <div class="progress-bar {% if calculated_progress == 100 %}bg-success{% elif calculated_progress > 50 %}bg-primary{% elif calculated_progress > 0 %}bg-warning{% else %}bg-secondary{% endif %}"
+                     style="width:{{ calculated_progress }}%" role="progressbar"></div>
             </div>
-            <strong style="font-size:0.88rem;">{{ progress }}%</strong>
+            <strong style="font-size:0.88rem;">{{ calculated_progress }}%</strong>
         </div>
     </div>
 </div>

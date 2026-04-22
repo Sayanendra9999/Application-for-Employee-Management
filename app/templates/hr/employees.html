@@ -8,15 +8,20 @@
         <h4 style="font-weight:700;">Employee Directory</h4>
         <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">{{ employees | length }} employees found</p>
     </div>
-    <a href="{{ url_for('hr.add_employee') }}" class="btn btn-primary">
-        <i class="fas fa-plus me-2"></i>Add Employee
-    </a>
+    <div class="d-flex gap-2">
+        {% if unassigned_count > 0 %}
+        <a href="{{ url_for('hr.unassigned_employees') }}" class="btn btn-warning btn-sm" style="font-weight:600;">
+            <i class="fas fa-user-clock me-1"></i>Onboarding Queue
+            <span class="badge bg-dark ms-1">{{ unassigned_count }}</span>
+        </a>
+        {% endif %}
+    </div>
 </div>
 
 <!-- Filters -->
 <div class="data-card mb-4" style="padding:16px 20px;">
     <form method="GET" class="row g-2 align-items-end">
-        <div class="col-md-4">
+        <div class="col-md-3">
             <label class="form-label" style="font-size:0.8rem;">Department</label>
             <select name="department" class="form-select form-select-sm">
                 <option value="">All Departments</option>
@@ -25,14 +30,22 @@
                 {% endfor %}
             </select>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
+            <label class="form-label" style="font-size:0.8rem;">Status</label>
+            <select name="status" class="form-select form-select-sm" id="status-filter">
+                <option value="">All Employees</option>
+                <option value="unassigned" {% if status_filter == 'unassigned' %}selected{% endif %}>🔴 Unassigned</option>
+                <option value="assigned" {% if status_filter == 'assigned' %}selected{% endif %}>🟢 Assigned (Complete)</option>
+            </select>
+        </div>
+        <div class="col-md-3">
             <label class="form-label" style="font-size:0.8rem;">Search</label>
             <input type="text" name="search" class="form-control form-control-sm" placeholder="Name or code..." value="{{ search or '' }}">
         </div>
-        <div class="col-md-2">
+        <div class="col-md-1">
             <button type="submit" class="btn btn-primary btn-sm w-100"><i class="fas fa-search me-1"></i>Filter</button>
         </div>
-        {% if selected_dept or search %}
+        {% if selected_dept or search or status_filter %}
         <div class="col-md-2">
             <a href="{{ url_for('hr.employees') }}" class="btn btn-outline-secondary btn-sm w-100">Clear</a>
         </div>
@@ -42,7 +55,7 @@
 
 <div class="data-card">
     <div class="table-responsive">
-        <table class="table">
+        <table class="table" id="employees-table">
             <thead>
                 <tr>
                     <th>Code</th>
@@ -50,30 +63,63 @@
                     <th>Department</th>
                     <th>Designation</th>
                     <th>Joined</th>
+                    <th>Status</th>
                     <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for emp in employees %}
+                {% set complete = is_profile_complete(emp) %}
                 <tr>
                     <td><code>{{ emp.emp_code }}</code></td>
                     <td class="fw-semibold">{{ emp.user.full_name }}</td>
-                    <td><span class="badge bg-light text-dark border" style="font-size:0.75rem;">{{ emp.department_name }}</span></td>
-                    <td style="font-size:0.88rem;">{{ emp.designation_title }}</td>
+                    <td>
+                        {% if emp.department %}
+                        <span class="badge bg-light text-dark border" style="font-size:0.75rem;">{{ emp.department_name }}</span>
+                        {% else %}
+                        <span class="badge" style="background:#fef2f2; color:#dc2626; border:1px solid #fecaca; font-size:0.75rem;">Unassigned</span>
+                        {% endif %}
+                    </td>
+                    <td style="font-size:0.88rem;">
+                        {% if emp.designation %}
+                        {{ emp.designation_title }}
+                        {% else %}
+                        <span style="color:#dc2626; font-size:0.82rem;">Unassigned</span>
+                        {% endif %}
+                    </td>
                     <td>{{ emp.date_of_joining.strftime('%d %b %Y') if emp.date_of_joining else '—' }}</td>
+                    <td>
+                        {% if complete %}
+                        <span class="badge" style="background:#d1fae5; color:#065f46; font-size:0.72rem; padding:4px 10px; border-radius:6px;">
+                            <i class="fas fa-check-circle me-1"></i>Complete
+                        </span>
+                        {% else %}
+                        <span class="badge" style="background:#fef3c7; color:#92400e; font-size:0.72rem; padding:4px 10px; border-radius:6px;">
+                            <i class="fas fa-exclamation-triangle me-1"></i>Incomplete
+                        </span>
+                        {% endif %}
+                    </td>
                     <td>
                         <div class="d-flex gap-1">
                             <a href="{{ url_for('hr.employee_detail', emp_id=emp.id) }}" class="btn-action" title="View">
                                 <i class="fas fa-eye"></i>
                             </a>
+                            {% if complete %}
                             <a href="{{ url_for('hr.edit_employee', emp_id=emp.id) }}" class="btn-action" title="Edit">
                                 <i class="fas fa-pen-to-square"></i>
                             </a>
+                            {% else %}
+                            <a href="{{ url_for('hr.complete_profile', emp_id=emp.id) }}"
+                               class="btn-action" title="Complete Profile"
+                               style="color:#f59e0b; font-weight:600;">
+                                <i class="fas fa-clipboard-check"></i>
+                            </a>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="6" class="text-center py-4" style="color:var(--text-secondary);">No employees found</td></tr>
+                <tr><td colspan="7" class="text-center py-4" style="color:var(--text-secondary);">No employees found</td></tr>
                 {% endfor %}
             </tbody>
         </table>

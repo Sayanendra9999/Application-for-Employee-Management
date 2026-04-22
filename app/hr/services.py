@@ -364,3 +364,85 @@ def get_review_periods():
         for q in range(4, 0, -1):
             periods.append((f'Q{q}-{y}', f'Q{q} {y}'))
     return periods
+
+
+# ===========================================================================
+# ONBOARDING / UNASSIGNED EMPLOYEE SERVICES
+# ===========================================================================
+def is_employee_profile_complete(emp):
+    """Check if an employee profile has all required fields filled.
+    An employee is 'unassigned' if they are missing department, designation,
+    salary, bank account, or PAN number."""
+    if not emp:
+        return False
+    if not emp.department_id:
+        return False
+    if not emp.designation_id:
+        return False
+    if not emp.salary or emp.salary <= 0:
+        return False
+    if not emp.bank_account or emp.bank_account.strip() == '':
+        return False
+    if not emp.pan_number or emp.pan_number.strip() == '':
+        return False
+    return True
+
+
+def get_missing_fields(emp):
+    """Return a list of field names that are still missing for the employee."""
+    missing = []
+    if not emp.department_id:
+        missing.append('Department')
+    if not emp.designation_id:
+        missing.append('Designation')
+    if not emp.salary or emp.salary <= 0:
+        missing.append('Salary')
+    if not emp.bank_account or emp.bank_account.strip() == '':
+        missing.append('Bank Account')
+    if not emp.pan_number or emp.pan_number.strip() == '':
+        missing.append('PAN Number')
+    return missing
+
+
+def get_unassigned_employees():
+    """Return all employees whose profiles are incomplete (missing key fields).
+    Uses existing schema — filters on NULL department/designation or empty
+    salary/bank/PAN."""
+    from app.models import User
+    all_emps = Employee.query.join(User).order_by(Employee.emp_code).all()
+    return [e for e in all_emps if not is_employee_profile_complete(e)]
+
+
+def get_unassigned_count():
+    """Quick count of unassigned employees."""
+    return len(get_unassigned_employees())
+
+
+def complete_employee_profile(emp, department_id, designation_id, salary,
+                              bank_account, pan_number, date_of_joining=None):
+    """Update an employee's profile with the missing details.
+    Returns (success, message)."""
+    if not emp:
+        return False, 'Employee not found.'
+
+    # Validate required fields
+    if not department_id or department_id == 0:
+        return False, 'Department is required.'
+    if not designation_id or designation_id == 0:
+        return False, 'Designation is required.'
+    if not salary or float(salary) <= 0:
+        return False, 'A valid salary is required.'
+    if not bank_account or bank_account.strip() == '':
+        return False, 'Bank account is required.'
+    if not pan_number or pan_number.strip() == '':
+        return False, 'PAN number is required.'
+
+    emp.department_id = int(department_id)
+    emp.designation_id = int(designation_id)
+    emp.salary = float(salary)
+    emp.bank_account = bank_account.strip()
+    emp.pan_number = pan_number.strip().upper()
+    if date_of_joining:
+        emp.date_of_joining = date_of_joining
+
+    return True, f'Profile for {emp.emp_code} ({emp.user.full_name}) completed successfully.'

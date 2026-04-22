@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Add Task — Enterprise Portal{% endblock %}
+{% block page_title %}Add Task{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="{{ url_for('employee.my_tasks') }}" class="btn btn-outline-primary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Back
+    </a>
+</div>
+
+<div class="row align-items-center justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <div class="data-card p-4">
+            <h4 class="mb-4" style="font-weight:700;"><i class="fas fa-plus-circle me-2" style="color:var(--primary);"></i>Create New Task</h4>
+            
+            <form method="POST" action="">
+                {{ form.hidden_tag() }}
+                
+                <div class="mb-3">
+                    {{ form.title.label(class="form-label fw-bold") }}
+                    {{ form.title(class="form-control", placeholder="e.g. Update UI components") }}
+                    {% for error in form.title.errors %}
+                        <span class="text-danger" style="font-size:0.8rem;">{{ error }}</span>
+                    {% endfor %}
+                </div>
+                
+                <div class="mb-3">
+                    {{ form.project_id.label(class="form-label fw-bold") }}
+                    {{ form.project_id(class="form-select") }}
+                    {% for error in form.project_id.errors %}
+                        <span class="text-danger" style="font-size:0.8rem;">{{ error }}</span>
+                    {% endfor %}
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        {{ form.priority.label(class="form-label fw-bold") }}
+                        {{ form.priority(class="form-select") }}
+                        {% for error in form.priority.errors %}
+                            <span class="text-danger" style="font-size:0.8rem;">{{ error }}</span>
+                        {% endfor %}
+                    </div>
+                    <div class="col-md-6">
+                        {{ form.due_date.label(class="form-label fw-bold") }}
+                        {{ form.due_date(class="form-control", type="date") }}
+                        {% for error in form.due_date.errors %}
+                            <span class="text-danger" style="font-size:0.8rem;">{{ error }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    {{ form.description.label(class="form-label fw-bold") }}
+                    {{ form.description(class="form-control", rows="4", placeholder="Detailed task requirements...") }}
+                    {% for error in form.description.errors %}
+                        <span class="text-danger" style="font-size:0.8rem;">{{ error }}</span>
+                    {% endfor %}
+                </div>
+
+                <div class="d-grid">
+                    {{ form.submit(class="btn btn-primary py-2", style="font-weight:600;") }}
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

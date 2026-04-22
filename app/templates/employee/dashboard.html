@@ -8,6 +8,37 @@
     <p style="color:var(--text-secondary); font-size:0.9rem;">Welcome to your self-service portal</p>
 </div>
 
+<!-- Profile Activation Gate -->
+{% if employee and not profile_complete %}
+<div style="background:linear-gradient(135deg,#fff7ed,#fef3c7); border:2px solid #fbbf24; border-radius:16px; padding:30px; margin-bottom:30px; text-align:center;">
+    <div style="width:72px; height:72px; background:linear-gradient(135deg,#f59e0b,#d97706); border-radius:16px; display:flex; align-items:center; justify-content:center; margin:0 auto 16px;">
+        <i class="fas fa-user-clock" style="color:#fff; font-size:1.8rem;"></i>
+    </div>
+    <h4 style="font-weight:700; color:#92400e; margin-bottom:8px;">Profile Setup in Progress</h4>
+    <p style="color:#a16207; font-size:0.9rem; max-width:560px; margin:0 auto 16px;">
+        Your account has been created by the Administrator. The HR team is working on completing your profile with department assignment, designation, salary, and financial details.
+    </p>
+    <div style="background:#fff; border-radius:12px; padding:16px 24px; max-width:400px; margin:0 auto; border:1px solid #fde68a;">
+        <p style="font-weight:600; font-size:0.82rem; color:#78350f; margin-bottom:8px;">Your Employee Info</p>
+        <div class="d-flex flex-column gap-1" style="font-size:0.85rem; text-align:left;">
+            <div><strong>Code:</strong> <code>{{ employee.emp_code }}</code></div>
+            <div><strong>Department:</strong>
+                {% if employee.department %}{{ employee.department_name }}{% else %}<span style="color:#dc2626;">Awaiting assignment</span>{% endif %}
+            </div>
+            <div><strong>Designation:</strong>
+                {% if employee.designation %}{{ employee.designation_title }}{% else %}<span style="color:#dc2626;">Awaiting assignment</span>{% endif %}
+            </div>
+        </div>
+    </div>
+    <p style="font-size:0.78rem; color:#b45309; margin:16px 0 0;">
+        <i class="fas fa-info-circle me-1"></i>Full portal access will be available once HR completes your profile.
+    </p>
+</div>
+{% endif %}
+
+<!-- Full dashboard visible only when profile is complete -->
+{% if not employee or profile_complete %}
+
 <!-- Attendance Quick Action -->
 {% if employee %}
 <div class="data-card mb-4" style="border-left: 4px solid var(--primary);">
@@ -171,7 +202,16 @@
                     <td class="fw-semibold">{{ task.title }}</td>
                     <td>{{ task.project.name }}</td>
                     <td><span class="badge-status badge-{{ task.priority|lower }}">{{ task.priority }}</span></td>
-                    <td><span class="badge-status badge-{{ task.status|lower|replace(' ', '') }}">{{ task.status }}</span></td>
+                    <td>
+                        <select class="form-select form-select-sm" 
+                                style="font-size:0.75rem; padding: 2px 20px 2px 8px; width:110px; border-radius: 12px; font-weight:600; cursor:pointer; 
+                                {% if task.status == 'Done' %}background-color: var(--success); color: white;{% elif task.status == 'In Progress' %}background-color: var(--primary); color: white;{% else %}background-color: var(--warning); color: white;{% endif %}"
+                                onchange="updateTaskStatus(this, {{ task.id }})">
+                            <option value="Pending" style="color:black; background:white;" {% if task.status == 'Pending' %}selected{% endif %}>Pending</option>
+                            <option value="In Progress" style="color:black; background:white;" {% if task.status == 'In Progress' %}selected{% endif %}>In Progress</option>
+                            <option value="Done" style="color:black; background:white;" {% if task.status == 'Done' %}selected{% endif %}>Done</option>
+                        </select>
+                    </td>
                     <td>{{ task.due_date.strftime('%d %b %Y') if task.due_date else '—' }}</td>
                 </tr>
                 {% else %}
@@ -195,4 +235,51 @@
     </div>
 </div>
 {% endif %}
+
+{% endif %}{# end profile_complete gate #}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function updateTaskStatus(selectElement, taskId) {
+    const newStatus = selectElement.value;
+    
+    // Update color based on new status
+    if(newStatus === 'Done') {
+        selectElement.style.backgroundColor = 'var(--success)';
+    } else if(newStatus === 'In Progress') {
+        selectElement.style.backgroundColor = 'var(--primary)';
+    } else {
+        selectElement.style.backgroundColor = 'var(--warning)';
+    }
+    
+    fetch('/employee/api/tasks/' + taskId + '/status', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({ status: newStatus })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Toast notification instead of alert for better UX
+            const toast = document.createElement('div');
+            toast.className = 'alert alert-success alert-dismissible fade show position-fixed bottom-0 end-0 m-3';
+            toast.style.zIndex = '1050';
+            toast.innerHTML = '<i class="fas fa-check-circle me-2"></i>' + data.message + 
+                              '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+            document.body.appendChild(toast);
+            setTimeout(() => { if (document.body.contains(toast)) toast.remove(); }, 3000);
+        } else {
+            alert('Error: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred while updating the task status.');
+    });
+}
+</script>
 {% endblock %}

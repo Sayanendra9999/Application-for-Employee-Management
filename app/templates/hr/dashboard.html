@@ -34,6 +34,31 @@
     </div>
 </div>
 
+<!-- Unassigned Employees Alert -->
+{% if unassigned_count > 0 %}
+<div style="background:linear-gradient(135deg,#fef3c7,#fffbeb); border:2px solid #fbbf24; border-radius:14px; padding:16px 22px; margin-bottom:24px;">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-3">
+            <div style="width:40px; height:40px; background:#f59e0b; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                <i class="fas fa-user-clock" style="color:#fff; font-size:1rem;"></i>
+            </div>
+            <div>
+                <h6 style="font-weight:700; margin-bottom:2px; color:#92400e;">
+                    {{ unassigned_count }} Unassigned Employee{{ 's' if unassigned_count != 1 else '' }}
+                </h6>
+                <p style="font-size:0.82rem; color:#a16207; margin:0;">
+                    Profiles created by Admin need department, designation, salary, and financial details.
+                </p>
+            </div>
+        </div>
+        <a href="{{ url_for('hr.unassigned_employees') }}" class="btn btn-sm"
+           style="background:linear-gradient(135deg,#f59e0b,#d97706); color:#fff; font-weight:600; padding:8px 20px; border-radius:8px;">
+            <i class="fas fa-clipboard-check me-1"></i>Review Now
+        </a>
+    </div>
+</div>
+{% endif %}
+
 <!-- Working Hours Info -->
 <div style="background:var(--bg-card); border:1px solid var(--border-color); border-radius:12px; padding:14px 20px; margin-bottom:24px; font-size:0.82rem; color:var(--text-secondary);">
     <i class="fas fa-info-circle me-1" style="color:var(--primary);"></i>
@@ -50,6 +75,12 @@
             </div>
             <div class="p-4">
                 <div class="d-grid gap-2">
+                    <a href="{{ url_for('hr.unassigned_employees') }}" class="btn btn-outline-warning text-start">
+                        <i class="fas fa-user-clock me-2"></i>Onboarding Queue
+                        {% if unassigned_count > 0 %}
+                        <span class="badge bg-warning text-dark float-end">{{ unassigned_count }}</span>
+                        {% endif %}
+                    </a>
                     <a href="{{ url_for('hr.employees') }}" class="btn btn-outline-primary text-start">
                         <i class="fas fa-users me-2"></i>Manage Employees
                     </a>

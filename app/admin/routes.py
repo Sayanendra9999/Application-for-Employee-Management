@@ -51,6 +51,11 @@ def dashboard():
     total_departments = Department.query.count()
     total_designations = Designation.query.count()
     recent_users = User.query.order_by(User.created_at.desc()).limit(5).all()
+
+    # Count unassigned employees for onboarding visibility
+    from app.hr import services as hr_services
+    unassigned_employees = hr_services.get_unassigned_count()
+
     return render_template('admin/dashboard.html',
                            total_users=total_users,
                            active_users=active_users,
@@ -65,7 +70,8 @@ def dashboard():
                            total_notifications=total_notifications,
                            total_departments=total_departments,
                            total_designations=total_designations,
-                           recent_users=recent_users)
+                           recent_users=recent_users,
+                           unassigned_employees=unassigned_employees)
 
 
 # ===========================================================================
@@ -76,8 +82,10 @@ def dashboard():
 def users():
     all_users = User.query.order_by(User.created_at.desc()).all()
     new_user_info = session.pop('new_user_info', None)
+    from app.hr import services as hr_services
     return render_template('admin/users.html', users=all_users,
-                           new_user_info=new_user_info)
+                           new_user_info=new_user_info,
+                           is_profile_complete=hr_services.is_employee_profile_complete)
 
 
 @bp.route('/users/add', methods=['GET', 'POST'])

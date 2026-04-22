@@ -8,9 +8,11 @@
         <h4 style="font-weight:700;">Tasks Assigned to Me</h4>
         <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">{{ tasks|length }} tasks</p>
     </div>
-    <a href="{{ url_for('employee.projects') }}" class="btn btn-outline-primary btn-sm">
-        <i class="fas fa-diagram-project me-1"></i>My Projects
-    </a>
+    <div>
+        <a href="{{ url_for('employee.projects') }}" class="btn btn-outline-primary btn-sm">
+            <i class="fas fa-diagram-project me-1"></i>My Projects
+        </a>
+    </div>
 </div>
 
 <div class="mb-3">
@@ -32,7 +34,16 @@
                     <td class="fw-semibold">{{ task.title }}</td>
                     <td>{{ task.project.name }}</td>
                     <td><span class="badge-status badge-{{ task.priority|lower }}">{{ task.priority }}</span></td>
-                    <td><span class="badge-status badge-{{ task.status|lower|replace(' ', '') }}">{{ task.status }}</span></td>
+                    <td>
+                        <select class="form-select form-select-sm" 
+                                style="font-size:0.75rem; padding: 2px 20px 2px 8px; width:110px; border-radius: 12px; font-weight:600; cursor:pointer; 
+                                {% if task.status == 'Done' %}background-color: var(--success); color: white;{% elif task.status == 'In Progress' %}background-color: var(--primary); color: white;{% else %}background-color: var(--warning); color: white;{% endif %}"
+                                onchange="updateTaskStatus(this, {{ task.id }})">
+                            <option value="Pending" style="color:black; background:white;" {% if task.status == 'Pending' %}selected{% endif %}>Pending</option>
+                            <option value="In Progress" style="color:black; background:white;" {% if task.status == 'In Progress' %}selected{% endif %}>In Progress</option>
+                            <option value="Done" style="color:black; background:white;" {% if task.status == 'Done' %}selected{% endif %}>Done</option>
+                        </select>
+                    </td>
                     <td>
                         {{ task.due_date.strftime('%d %b %Y') if task.due_date else '—' }}
                     </td>
@@ -44,4 +55,48 @@
         </table>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function updateTaskStatus(selectElement, taskId) {
+    const newStatus = selectElement.value;
+    
+    // Update color based on new status
+    if(newStatus === 'Done') {
+        selectElement.style.backgroundColor = 'var(--success)';
+    } else if(newStatus === 'In Progress') {
+        selectElement.style.backgroundColor = 'var(--primary)';
+    } else {
+        selectElement.style.backgroundColor = 'var(--warning)';
+    }
+    
+    fetch('/employee/api/tasks/' + taskId + '/status', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({ status: newStatus })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const toast = document.createElement('div');
+            toast.className = 'alert alert-success alert-dismissible fade show position-fixed bottom-0 end-0 m-3';
+            toast.style.zIndex = '1050';
+            toast.innerHTML = '<i class="fas fa-check-circle me-2"></i>' + data.message + 
+                              '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+            document.body.appendChild(toast);
+            setTimeout(() => { if (document.body.contains(toast)) toast.remove(); }, 3000);
+        } else {
+            alert('Error: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred while updating the task status.');
+    });
+}
+</script>
 {% endblock %}

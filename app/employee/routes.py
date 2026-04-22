@@ -5,7 +5,7 @@ Employee can only view/submit — no approval permissions.
 """
 
 from flask import (render_template, redirect, url_for, flash, request,
-                   current_app, send_from_directory)
+                   current_app, send_from_directory, jsonify)
 from flask_login import current_user
 from app.employee import bp
 from app.decorators import module_required
@@ -29,8 +29,11 @@ def dashboard():
     leave_balances = []
     pending_leaves = 0
     att_summary = {}
+    profile_complete = False
 
     if employee:
+        from app.hr import services as hr_services
+        profile_complete = hr_services.is_employee_profile_complete(employee)
         today_att = services.get_today_attendance(employee.id)
         leave_balances = services.get_my_leave_balances(employee.id)
         pending_leaves = len(services.get_my_leaves(employee.id, status='Pending'))
@@ -44,6 +47,7 @@ def dashboard():
 
     return render_template('employee/dashboard.html',
                            employee=employee,
+                           profile_complete=profile_complete,
                            today_att=today_att,
                            leave_balances=leave_balances,
                            pending_leaves=pending_leaves,
@@ -406,3 +410,23 @@ def my_tasks():
                                   status=status_filter or None)
     return render_template('employee/my_tasks.html',
                            tasks=tasks, selected_status=status_filter)
+
+
+@bp.route('/api/tasks/<int:task_id>/status', methods=['POST'])
+@module_required('employee')
+def update_task_status(task_id):
+    """Update task status via API (Pending -> In Progress -> Done)."""
+    data = request.get_json()
+    new_status = data.get('status')
+    
+    success, msg = services.update_task_status(
+        user_id=current_user.id,
+        task_id=task_id,
+        new_status=new_status,
+        ip=request.remote_addr or ''
+    )
+    if success:
+        db.session.commit()
+        return jsonify({'success': True, 'message': msg})
+    return jsonify({'success': False, 'message': msg}), 400
+
