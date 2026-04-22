@@ -13,7 +13,8 @@ from app.extensions import db
 from app.models import (Employee, Attendance, Leave, LeaveBalance, LeavePolicy,
                         SalaryRecord, EmployeeDocument, PerformanceReview,
                         Notification, Project, ProjectMember, Task,
-                        ProfileUpdateRequest, EmployeeExpense)
+                        ProfileUpdateRequest, EmployeeExpense,
+                        Shift, CompOff, ShiftSwapRequest)
 from app.employee.utils import logger, create_notification, log_employee_action
 
 
@@ -489,4 +490,102 @@ def update_task_status(user_id, task_id, new_status, ip=''):
     except Exception as e:
         logger.error(f'Error updating task status: {e}')
         return False, 'An error occurred while updating the task status.'
+
+
+# ===========================================================================
+# SHIFT & COMP-OFF SERVICES (NEW)
+# ===========================================================================
+def get_my_shift(employee_id):
+    """Get the employee's assigned shift details."""
+    try:
+        emp = Employee.query.get(employee_id)
+        if not emp or not emp.shift_id:
+            return None
+        return Shift.query.get(emp.shift_id)
+    except Exception as e:
+        logger.error(f'Error fetching shift: {e}')
+        return None
+
+
+def get_my_shift_rules(employee_id):
+    """Get shift rules for the employee (delegates to HR services)."""
+    try:
+        from app.hr.services import get_shift_rules_for_employee
+        return get_shift_rules_for_employee(employee_id)
+    except Exception as e:
+        logger.error(f'Error fetching shift rules: {e}')
+        return {'shift_name': 'General', 'start_time': '09:00', 'end_time': '18:00'}
+
+
+def get_my_comp_offs(employee_id):
+    """Get comp-off records for the employee."""
+    try:
+        return CompOff.query.filter_by(
+            employee_id=employee_id
+        ).order_by(CompOff.created_at.desc()).all()
+    except Exception as e:
+        logger.error(f'Error fetching comp-offs: {e}')
+        return []
+
+
+def get_my_shift_swap_requests(employee_id):
+    """Get shift swap requests for the employee."""
+    try:
+        return ShiftSwapRequest.query.filter_by(
+            employee_id=employee_id
+        ).order_by(ShiftSwapRequest.created_at.desc()).all()
+    except Exception as e:
+        logger.error(f'Error fetching shift swap requests: {e}')
+        return []
+
+
+def submit_shift_swap_request(employee, requested_shift_id, reason='', ip=''):
+    """Submit a shift swap request. Returns (success, message)."""
+    try:
+        # Check for existing pending request
+        existing = ShiftSwapRequest.query.filter_by(
+            employee_id=employee.id, status='Pending'
+        ).first()
+        if existing:
+            return False, 'You already have a pending shift swap request'
+
+        # Validate requested shift exists
+        requested_shift = Shift.query.get(requested_shift_id)
+        if not requested_shift or not requested_shift.is_active:
+            return False, 'Requested shift is not available'
+
+        # Check not requesting same shift
+        if employee.shift_id == requested_shift_id:
+            return False, 'You are already assigned to this shift'
+
+        swap = ShiftSwapRequest(
+            employee_id=employee.id,
+            current_shift_id=employee.shift_id,
+            requested_shift_id=requested_shift_id,
+            reason=reason,
+            status='Pending'
+        )
+        db.session.add(swap)
+
+        log_employee_action('SUBMIT', 'ShiftSwapRequest', None,
+                          f'Requested swap to {requested_shift.shift_name}', ip)
+
+        # Notify HR
+        from app.models import User, Module
+        hr_module = Module.query.filter_by(slug='hr').first()
+        if hr_module:
+            for hr_user in hr_module.users:
+                create_notification(
+                    hr_user.id,
+                    'Shift Swap Request',
+                    f'{employee.user.full_name} requested shift change to {requested_shift.shift_name}',
+                    category='info',
+                    link='/hr/shift-swaps'
+                )
+
+        logger.info(f'Shift swap request submitted: emp#{employee.id} to {requested_shift.shift_name}')
+        return True, f'Shift swap request submitted for {requested_shift.shift_name}'
+    except Exception as e:
+        logger.error(f'Error submitting shift swap: {e}')
+        return False, 'An error occurred while submitting your shift swap request'
 

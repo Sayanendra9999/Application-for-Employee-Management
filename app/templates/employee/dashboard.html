@@ -39,6 +39,18 @@
 <!-- Full dashboard visible only when profile is complete -->
 {% if not employee or profile_complete %}
 
+<!-- Shift Info -->
+{% if employee and shift_rules %}
+<div style="background:var(--bg-card); border:1px solid var(--border-color); border-radius:12px; padding:12px 20px; margin-bottom:16px; font-size:0.82rem; color:var(--text-secondary);">
+    <i class="fas fa-clock me-1" style="color:var(--primary);"></i>
+    <strong>Your Shift:</strong> {{ shift_rules.shift_name }}
+    ({{ shift_rules.start_time }} — {{ shift_rules.end_time }})
+    {% if comp_off_count > 0 %}
+    <span class="ms-3"><i class="fas fa-gift me-1"></i><strong>Comp-Offs:</strong> {{ comp_off_count }} available</span>
+    {% endif %}
+</div>
+{% endif %}
+
 <!-- Attendance Quick Action -->
 {% if employee %}
 <div class="data-card mb-4" style="border-left: 4px solid var(--primary);">
@@ -129,6 +141,16 @@
                     </a>
                     <a href="{{ url_for('employee.profile') }}" class="btn btn-outline-primary text-start">
                         <i class="fas fa-user-edit me-2"></i>My Profile
+                    </a>
+                    <hr style="margin:4px 0; border-color:var(--border-color);">
+                    <a href="{{ url_for('employee.shift_swap') }}" class="btn btn-outline-primary text-start">
+                        <i class="fas fa-arrows-rotate me-2"></i>Shift Swap Request
+                    </a>
+                    <a href="{{ url_for('employee.my_comp_offs') }}" class="btn btn-outline-primary text-start">
+                        <i class="fas fa-gift me-2"></i>My Comp-Offs
+                        {% if comp_off_count > 0 %}
+                        <span class="badge bg-info float-end">{{ comp_off_count }}</span>
+                        {% endif %}
                     </a>
                 </div>
             </div>
@@ -230,6 +252,7 @@
             <div class="col-md-3"><strong>Employee Code:</strong> {{ employee.emp_code }}</div>
             <div class="col-md-3"><strong>Department:</strong> {{ employee.department_name }}</div>
             <div class="col-md-3"><strong>Designation:</strong> {{ employee.designation_title }}</div>
+            <div class="col-md-3"><strong>Shift:</strong> {{ employee.shift_name }}</div>
             <div class="col-md-3"><strong>Date of Joining:</strong> {{ employee.date_of_joining.strftime('%d %b %Y') if employee.date_of_joining else '—' }}</div>
         </div>
     </div>

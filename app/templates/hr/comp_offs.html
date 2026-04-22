@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Comp-Offs — Enterprise Portal{% endblock %}
+{% block page_title %}Compensatory Off Management{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 style="font-weight:700;">Comp-Off Records</h4>
+        <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">Overtime-earned compensatory offs — review and approve</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('hr.comp_offs') }}" class="btn btn-outline-primary btn-sm {% if not selected_status %}active{% endif %}">All</a>
+        <a href="{{ url_for('hr.comp_offs', status='Earned') }}" class="btn btn-outline-warning btn-sm {% if selected_status == 'Earned' %}active{% endif %}">Earned</a>
+        <a href="{{ url_for('hr.comp_offs', status='Used') }}" class="btn btn-outline-success btn-sm {% if selected_status == 'Used' %}active{% endif %}">Used</a>
+    </div>
+</div>
+
+<div class="data-card">
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Employee</th>
+                    <th>Earned Date</th>
+                    <th>Extra Hours</th>
+                    <th>Status</th>
+                    <th>Used Date</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in comp_offs %}
+                <tr>
+                    <td class="fw-semibold">
+                        {{ c.employee.user.full_name }}
+                        <br><small style="color:var(--text-secondary);">{{ c.employee.emp_code }}</small>
+                    </td>
+                    <td>{{ c.earned_date.strftime('%d %b %Y') }}</td>
+                    <td>
+                        <span style="font-weight:700; color:var(--primary);">{{ c.hours_extra|round(1) }}h</span>
+                    </td>
+                    <td>
+                        {% if c.status == 'Earned' %}
+                        <span class="badge-status badge-planning">Earned</span>
+                        {% elif c.status == 'Used' %}
+                        <span class="badge-status badge-approved">Used</span>
+                        {% else %}
+                        <span class="badge-status badge-rejected">{{ c.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ c.used_date.strftime('%d %b %Y') if c.used_date else '—' }}</td>
+                    <td>
+                        {% if c.status == 'Earned' %}
+                        <form method="POST" action="{{ url_for('hr.approve_comp_off', comp_id=c.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button class="btn btn-success btn-sm" title="Approve">
+                                <i class="fas fa-check me-1"></i>Approve
+                            </button>
+                        </form>
+                        {% elif c.approver %}
+                        <small style="color:var(--text-secondary);">By {{ c.approver.full_name }}</small>
+                        {% else %}
+                        <span style="color:var(--text-secondary);">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="text-center py-4" style="color:var(--text-secondary);">No comp-off records</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

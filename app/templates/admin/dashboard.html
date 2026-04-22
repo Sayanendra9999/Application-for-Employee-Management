@@ -109,9 +109,14 @@
                     </a>
                     <a href="{{ url_for('admin.leave_policies') }}" class="btn btn-outline-primary text-start">
                         <i class="fas fa-calendar-days me-2"></i>Leave Policies
+                        <span class="badge bg-primary float-end">{{ total_leave_policies }}</span>
+                    </a>
+                    <a href="{{ url_for('admin.shifts') }}" class="btn btn-outline-primary text-start">
+                        <i class="fas fa-clock-rotate-left me-2"></i>Shifts
+                        <span class="badge bg-primary float-end">{{ total_shifts }}</span>
                     </a>
                     <a href="{{ url_for('admin.attendance_rules') }}" class="btn btn-outline-primary text-start">
-                        <i class="fas fa-clock me-2"></i>Attendance Rules
+                        <i class="fas fa-clock me-2"></i>Attendance Rules (General Shift)
                     </a>
                 </div>
             </div>

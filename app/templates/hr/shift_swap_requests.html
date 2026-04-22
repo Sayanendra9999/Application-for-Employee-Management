@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Shift Swap Requests — Enterprise Portal{% endblock %}
+{% block page_title %}Shift Swap Requests{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 style="font-weight:700;">Shift Swap Requests</h4>
+        <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">Review and manage employee shift change requests</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('hr.shift_swaps') }}" class="btn btn-outline-primary btn-sm {% if not selected_status %}active{% endif %}">All</a>
+        <a href="{{ url_for('hr.shift_swaps', status='Pending') }}" class="btn btn-outline-warning btn-sm {% if selected_status == 'Pending' %}active{% endif %}">Pending</a>
+        <a href="{{ url_for('hr.shift_swaps', status='Approved') }}" class="btn btn-outline-success btn-sm {% if selected_status == 'Approved' %}active{% endif %}">Approved</a>
+        <a href="{{ url_for('hr.shift_swaps', status='Rejected') }}" class="btn btn-outline-danger btn-sm {% if selected_status == 'Rejected' %}active{% endif %}">Rejected</a>
+    </div>
+</div>
+
+<div class="data-card">
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Employee</th>
+                    <th>Current Shift</th>
+                    <th>Requested Shift</th>
+                    <th>Reason</th>
+                    <th>Date</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in swaps %}
+                <tr>
+                    <td class="fw-semibold">
+                        {{ s.employee.user.full_name }}
+                        <br><small style="color:var(--text-secondary);">{{ s.employee.emp_code }}</small>
+                    </td>
+                    <td>{{ s.current_shift.shift_name if s.current_shift else 'General' }}</td>
+                    <td>
+                        <span style="font-weight:600; color:var(--primary);">
+                            {{ s.requested_shift.shift_name if s.requested_shift else '—' }}
+                        </span>
+                    </td>
+                    <td style="font-size:0.85rem; max-width:200px;">{{ s.reason or '—' }}</td>
+                    <td>{{ s.created_at.strftime('%d %b %Y') }}</td>
+                    <td>
+                        {% if s.status == 'Pending' %}
+                        <span class="badge-status badge-planning">Pending</span>
+                        {% elif s.status == 'Approved' %}
+                        <span class="badge-status badge-approved">Approved</span>
+                        {% else %}
+                        <span class="badge-status badge-rejected">Rejected</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if s.status == 'Pending' %}
+                        <div class="d-flex gap-1">
+                            <form method="POST" action="{{ url_for('hr.approve_shift_swap', swap_id=s.id) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button class="btn btn-success btn-sm" title="Approve">
+                                    <i class="fas fa-check"></i>
+                                </button>
+                            </form>
+                            <form method="POST" action="{{ url_for('hr.reject_shift_swap', swap_id=s.id) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button class="btn btn-danger btn-sm" title="Reject">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </form>
+                        </div>
+                        {% elif s.reviewer %}
+                        <small style="color:var(--text-secondary);">By {{ s.reviewer.full_name }}</small>
+                        {% else %}
+                        <span style="color:var(--text-secondary);">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" class="text-center py-4" style="color:var(--text-secondary);">No shift swap requests</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

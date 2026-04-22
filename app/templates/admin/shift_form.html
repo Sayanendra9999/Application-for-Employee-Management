@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — Enterprise Portal{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <a href="{{ url_for('admin.shifts') }}" class="btn btn-outline-secondary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Back to Shifts
+    </a>
+</div>
+
+<div class="form-card">
+    <form method="POST" novalidate>
+        {{ form.hidden_tag() }}
+
+        <div class="row g-3">
+            <div class="col-md-6">
+                {{ form.shift_name.label(class="form-label") }}
+                {{ form.shift_name(class="form-control", placeholder="e.g. Morning Shift") }}
+                <small class="text-muted">Unique name for this shift</small>
+            </div>
+
+            <div class="col-md-3">
+                {{ form.start_time.label(class="form-label") }}
+                {{ form.start_time(class="form-control", type="time") }}
+            </div>
+
+            <div class="col-md-3">
+                {{ form.end_time.label(class="form-label") }}
+                {{ form.end_time(class="form-control", type="time") }}
+            </div>
+
+            <div class="col-md-4">
+                {{ form.grace_period_mins.label(class="form-label") }}
+                <div class="input-group">
+                    {{ form.grace_period_mins(class="form-control") }}
+                    <span class="input-group-text">mins</span>
+                </div>
+                <small class="text-muted">No penalty within this window</small>
+            </div>
+
+            <div class="col-md-4">
+                {{ form.min_working_hours.label(class="form-label") }}
+                <div class="input-group">
+                    {{ form.min_working_hours(class="form-control") }}
+                    <span class="input-group-text">hours</span>
+                </div>
+                <small class="text-muted">Required for full-day credit</small>
+            </div>
+
+            <div class="col-md-4">
+                {{ form.late_mark_after_mins.label(class="form-label") }}
+                <div class="input-group">
+                    {{ form.late_mark_after_mins(class="form-control") }}
+                    <span class="input-group-text">mins</span>
+                </div>
+                <small class="text-muted">Late mark after start + this</small>
+            </div>
+
+            <div class="col-md-6">
+                <div class="form-check form-switch mt-2">
+                    {{ form.overtime_eligible(class="form-check-input") }}
+                    {{ form.overtime_eligible.label(class="form-check-label") }}
+                </div>
+                <small class="text-muted">If enabled, extra hours can earn comp-off</small>
+            </div>
+
+            <div class="col-md-6">
+                <div class="form-check form-switch mt-2">
+                    {{ form.is_active(class="form-check-input") }}
+                    {{ form.is_active.label(class="form-check-label") }}
+                </div>
+            </div>
+        </div>
+
+        <hr class="my-4">
+        <div class="d-flex gap-2">
+            {{ form.submit(class="btn btn-primary") }}
+            <a href="{{ url_for('admin.shifts') }}" class="btn btn-outline-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -1,4 +1,4 @@
-"""Admin routes — user CRUD, module assignment, HR configuration."""
+"""Admin routes — user CRUD, module assignment, HR configuration, Shift management."""
 
 import secrets
 import string
@@ -8,10 +8,11 @@ from app.decorators import admin_required
 from app.extensions import db
 from app.models import (User, Module, UserModule, Employee, Project, Task,
                         Milestone, Notification,
-                        Department, Designation, LeavePolicy, AttendanceRule, AuditLog)
+                        Department, Designation, LeavePolicy, AttendanceRule, AuditLog,
+                        Shift)
 from app.admin.forms import UserCreateForm, UserEditForm, ModuleAssignForm
 from app.admin.config_forms import (DepartmentForm, DesignationForm,
-                                     LeavePolicyForm, AttendanceRuleForm)
+                                     LeavePolicyForm, AttendanceRuleForm, ShiftForm)
 
 
 def generate_readable_password():
@@ -50,6 +51,8 @@ def dashboard():
     total_notifications = Notification.query.count()
     total_departments = Department.query.count()
     total_designations = Designation.query.count()
+    total_shifts = Shift.query.filter_by(is_active=True).count()
+    total_leave_policies = LeavePolicy.query.filter_by(is_active=True).count()
     recent_users = User.query.order_by(User.created_at.desc()).limit(5).all()
 
     # Count unassigned employees for onboarding visibility
@@ -70,6 +73,8 @@ def dashboard():
                            total_notifications=total_notifications,
                            total_departments=total_departments,
                            total_designations=total_designations,
+                           total_shifts=total_shifts,
+                           total_leave_policies=total_leave_policies,
                            recent_users=recent_users,
                            unassigned_employees=unassigned_employees)
 
@@ -348,12 +353,12 @@ def edit_designation(desig_id):
 
 
 # ===========================================================================
-# LEAVE POLICY MANAGEMENT (NEW)
+# LEAVE POLICY MANAGEMENT (UPGRADED — designation-linked)
 # ===========================================================================
 @bp.route('/leave-policies')
 @admin_required
 def leave_policies():
-    policies = LeavePolicy.query.order_by(LeavePolicy.leave_type).all()
+    policies = LeavePolicy.query.order_by(LeavePolicy.leave_type, LeavePolicy.designation_id).all()
     return render_template('admin/leave_policies.html', policies=policies)
 
 
@@ -361,15 +366,31 @@ def leave_policies():
 @admin_required
 def add_leave_policy():
     form = LeavePolicyForm()
+    form.designation_id.choices = [(0, '— Global (All Roles) —')] + [
+        (d.id, f'{d.title} ({d.department.name})') for d in
+        Designation.query.filter_by(is_active=True).order_by(Designation.title)
+    ]
     if form.validate_on_submit():
-        if LeavePolicy.query.filter_by(leave_type=form.leave_type.data).first():
-            flash('Leave type already exists.', 'danger')
+        desig_id = form.designation_id.data if form.designation_id.data != 0 else None
+        # Check uniqueness: same leave_type + designation combo
+        existing = LeavePolicy.query.filter_by(
+            leave_type=form.leave_type.data, designation_id=desig_id
+        ).first()
+        if existing:
+            flash(f'Leave policy "{form.leave_type.data}" already exists for this designation.', 'danger')
             return render_template('admin/leave_policy_form.html', form=form, title='Add Leave Policy')
         policy = LeavePolicy(
-            leave_type=form.leave_type.data, total_days=form.total_days.data,
+            leave_type=form.leave_type.data,
+            designation_id=desig_id,
+            total_days=form.total_days.data,
             carry_forward=form.carry_forward.data,
             max_carry_days=form.max_carry_days.data or 0,
-            description=form.description.data or '', is_active=form.is_active.data
+            monthly_accrual=form.monthly_accrual.data,
+            encashment_allowed=form.encashment_allowed.data,
+            max_per_request=form.max_per_request.data if form.max_per_request.data else None,
+            blackout_dates=form.blackout_dates.data or '',
+            description=form.description.data or '',
+            is_active=form.is_active.data
         )
         db.session.add(policy)
         from flask_login import current_user
@@ -385,11 +406,23 @@ def add_leave_policy():
 def edit_leave_policy(policy_id):
     policy = LeavePolicy.query.get_or_404(policy_id)
     form = LeavePolicyForm(obj=policy)
+    form.designation_id.choices = [(0, '— Global (All Roles) —')] + [
+        (d.id, f'{d.title} ({d.department.name})') for d in
+        Designation.query.filter_by(is_active=True).order_by(Designation.title)
+    ]
+    if request.method == 'GET':
+        form.designation_id.data = policy.designation_id or 0
     if form.validate_on_submit():
+        desig_id = form.designation_id.data if form.designation_id.data != 0 else None
         policy.leave_type = form.leave_type.data
+        policy.designation_id = desig_id
         policy.total_days = form.total_days.data
         policy.carry_forward = form.carry_forward.data
         policy.max_carry_days = form.max_carry_days.data or 0
+        policy.monthly_accrual = form.monthly_accrual.data
+        policy.encashment_allowed = form.encashment_allowed.data
+        policy.max_per_request = form.max_per_request.data if form.max_per_request.data else None
+        policy.blackout_dates = form.blackout_dates.data or ''
         policy.description = form.description.data or ''
         policy.is_active = form.is_active.data
         from flask_login import current_user
@@ -401,7 +434,7 @@ def edit_leave_policy(policy_id):
 
 
 # ===========================================================================
-# ATTENDANCE RULES (NEW — single config)
+# ATTENDANCE RULES (single config — acts as General Shift)
 # ===========================================================================
 @bp.route('/attendance-rules', methods=['GET', 'POST'])
 @admin_required
@@ -424,6 +457,69 @@ def attendance_rules():
         flash('Attendance rules updated.', 'success')
         return redirect(url_for('admin.attendance_rules'))
     return render_template('admin/attendance_rules.html', form=form, rule=rule)
+
+
+# ===========================================================================
+# SHIFT MANAGEMENT (NEW)
+# ===========================================================================
+@bp.route('/shifts')
+@admin_required
+def shifts():
+    all_shifts = Shift.query.order_by(Shift.shift_name).all()
+    return render_template('admin/shifts.html', shifts=all_shifts)
+
+
+@bp.route('/shifts/add', methods=['GET', 'POST'])
+@admin_required
+def add_shift():
+    form = ShiftForm()
+    if form.validate_on_submit():
+        if Shift.query.filter_by(shift_name=form.shift_name.data).first():
+            flash('Shift name already exists.', 'danger')
+            return render_template('admin/shift_form.html', form=form, title='Add Shift')
+        shift = Shift(
+            shift_name=form.shift_name.data,
+            start_time=form.start_time.data,
+            end_time=form.end_time.data,
+            grace_period_mins=form.grace_period_mins.data,
+            min_working_hours=form.min_working_hours.data,
+            late_mark_after_mins=form.late_mark_after_mins.data,
+            overtime_eligible=form.overtime_eligible.data,
+            is_active=form.is_active.data
+        )
+        db.session.add(shift)
+        from flask_login import current_user
+        log_audit(current_user.id, 'CREATE', 'Shift', None, f'Created shift {shift.shift_name}')
+        db.session.commit()
+        flash(f'Shift "{shift.shift_name}" created.', 'success')
+        return redirect(url_for('admin.shifts'))
+    return render_template('admin/shift_form.html', form=form, title='Add Shift')
+
+
+@bp.route('/shifts/<int:shift_id>/edit', methods=['GET', 'POST'])
+@admin_required
+def edit_shift(shift_id):
+    shift = Shift.query.get_or_404(shift_id)
+    form = ShiftForm(obj=shift)
+    if form.validate_on_submit():
+        existing = Shift.query.filter(Shift.shift_name == form.shift_name.data, Shift.id != shift.id).first()
+        if existing:
+            flash('Shift name already taken.', 'danger')
+            return render_template('admin/shift_form.html', form=form, title='Edit Shift', shift=shift)
+        shift.shift_name = form.shift_name.data
+        shift.start_time = form.start_time.data
+        shift.end_time = form.end_time.data
+        shift.grace_period_mins = form.grace_period_mins.data
+        shift.min_working_hours = form.min_working_hours.data
+        shift.late_mark_after_mins = form.late_mark_after_mins.data
+        shift.overtime_eligible = form.overtime_eligible.data
+        shift.is_active = form.is_active.data
+        from flask_login import current_user
+        log_audit(current_user.id, 'UPDATE', 'Shift', shift.id, f'Updated shift {shift.shift_name}')
+        db.session.commit()
+        flash(f'Shift "{shift.shift_name}" updated.', 'success')
+        return redirect(url_for('admin.shifts'))
+    return render_template('admin/shift_form.html', form=form, title='Edit Shift', shift=shift)
 
 
 # ===========================================================================

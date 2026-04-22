@@ -10,7 +10,7 @@ from flask_login import current_user
 from app.employee import bp
 from app.decorators import module_required
 from app.extensions import db
-from app.models import LeavePolicy
+from app.models import LeavePolicy, Shift
 from app.employee import services
 from app.employee.utils import get_current_employee_or_abort, logger
 from app.employee.forms import (ProfileForm, ProfileUpdateRequestForm,
@@ -30,6 +30,8 @@ def dashboard():
     pending_leaves = 0
     att_summary = {}
     profile_complete = False
+    shift_rules = None
+    comp_off_count = 0
 
     if employee:
         from app.hr import services as hr_services
@@ -38,6 +40,8 @@ def dashboard():
         leave_balances = services.get_my_leave_balances(employee.id)
         pending_leaves = len(services.get_my_leaves(employee.id, status='Pending'))
         att_summary = services.get_my_attendance_summary(employee.id)
+        shift_rules = services.get_my_shift_rules(employee.id)
+        comp_off_count = len([c for c in services.get_my_comp_offs(employee.id) if c.status == 'Earned'])
 
     tasks = services.get_my_tasks(current_user.id)
     tasks_pending = sum(1 for t in tasks if t.status != 'Done')
@@ -52,6 +56,8 @@ def dashboard():
                            leave_balances=leave_balances,
                            pending_leaves=pending_leaves,
                            att_summary=att_summary,
+                           shift_rules=shift_rules,
+                           comp_off_count=comp_off_count,
                            tasks=tasks[:5],
                            tasks_pending=tasks_pending,
                            tasks_done=tasks_done,
@@ -184,7 +190,8 @@ def leave_balance():
     """View leave balance details."""
     employee = get_current_employee_or_abort()
     balances = services.get_my_leave_balances(employee.id)
-    policies = LeavePolicy.query.filter_by(is_active=True).order_by(LeavePolicy.leave_type).all()
+    from app.hr.services import get_leave_policies_for_employee
+    policies = get_leave_policies_for_employee(employee.id)
 
     return render_template('employee/leave_balance.html',
                            balances=balances, policies=policies,
@@ -197,8 +204,10 @@ def request_leave():
     """Apply for leave."""
     employee = get_current_employee_or_abort()
     form = LeaveRequestForm()
-    policies = LeavePolicy.query.filter_by(is_active=True).order_by(LeavePolicy.leave_type).all()
-    form.leave_type.choices = [(p.leave_type, p.leave_type) for p in policies]
+    # Get only policies applicable to this employee's designation (role-based)
+    from app.hr.services import get_leave_policies_for_employee
+    applicable_policies = get_leave_policies_for_employee(employee.id)
+    form.leave_type.choices = list(set([(p.leave_type, p.leave_type) for p in applicable_policies]))
     leave_balances = services.get_my_leave_balances(employee.id)
 
     if form.validate_on_submit():
@@ -429,4 +438,53 @@ def update_task_status(task_id):
         db.session.commit()
         return jsonify({'success': True, 'message': msg})
     return jsonify({'success': False, 'message': msg}), 400
+
+
+# ===========================================================================
+# SHIFT SWAP REQUEST (NEW)
+# ===========================================================================
+@bp.route('/shift-swap', methods=['GET', 'POST'])
+@module_required('employee')
+def shift_swap():
+    """Submit a shift swap request."""
+    employee = get_current_employee_or_abort()
+    shifts = Shift.query.filter_by(is_active=True).order_by(Shift.shift_name).all()
+    my_shift = services.get_my_shift(employee.id)
+    swap_requests = services.get_my_shift_swap_requests(employee.id)
+
+    if request.method == 'POST':
+        requested_shift_id = request.form.get('shift_id', type=int)
+        reason = request.form.get('reason', '')
+        if not requested_shift_id:
+            flash('Please select a shift.', 'danger')
+        else:
+            success, msg = services.submit_shift_swap_request(
+                employee, requested_shift_id, reason=reason,
+                ip=request.remote_addr or ''
+            )
+            if success:
+                db.session.commit()
+                flash(msg, 'success')
+            else:
+                flash(msg, 'danger')
+        return redirect(url_for('employee.shift_swap'))
+
+    return render_template('employee/shift_swap.html',
+                           employee=employee,
+                           shifts=shifts,
+                           my_shift=my_shift,
+                           swap_requests=swap_requests)
+
+
+# ===========================================================================
+# COMP-OFF VIEW (NEW)
+# ===========================================================================
+@bp.route('/comp-offs')
+@module_required('employee')
+def my_comp_offs():
+    """View comp-off records."""
+    employee = get_current_employee_or_abort()
+    comp_offs = services.get_my_comp_offs(employee.id)
+    return render_template('employee/comp_offs.html',
+                           comp_offs=comp_offs, employee=employee)
 

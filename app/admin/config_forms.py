@@ -1,4 +1,4 @@
-"""Admin configuration forms — Departments, Designations, Leave Policies, Attendance Rules."""
+"""Admin configuration forms — Departments, Designations, Leave Policies, Attendance Rules, Shifts."""
 
 from flask_wtf import FlaskForm
 from wtforms import (StringField, IntegerField, BooleanField, FloatField,
@@ -27,9 +27,16 @@ class DesignationForm(FlaskForm):
 
 class LeavePolicyForm(FlaskForm):
     leave_type = StringField('Leave Type', validators=[DataRequired(), Length(2, 50)])
+    designation_id = SelectField('Linked Designation (Role)', coerce=int,
+                                 validators=[Optional()], default=0)
     total_days = IntegerField('Total Days per Year', validators=[DataRequired(), NumberRange(1, 365)])
     carry_forward = BooleanField('Allow Carry Forward', default=False)
     max_carry_days = IntegerField('Max Carry Forward Days', validators=[Optional()], default=0)
+    monthly_accrual = BooleanField('Monthly Accrual', default=False)
+    encashment_allowed = BooleanField('Leave Encashment', default=False)
+    max_per_request = IntegerField('Max Days per Request', validators=[Optional()])
+    blackout_dates = TextAreaField('Blackout Dates (JSON)', validators=[Optional()],
+                                   description='e.g. [{"start":"2026-12-25","end":"2026-12-31"}]')
     description = TextAreaField('Description', validators=[Optional(), Length(0, 250)])
     is_active = BooleanField('Active', default=True)
     submit = SubmitField('Save Policy')
@@ -45,3 +52,18 @@ class AttendanceRuleForm(FlaskForm):
     half_day_hours = FloatField('Half Day Hours', validators=[DataRequired()], default=4.0)
     full_day_hours = FloatField('Full Day Hours', validators=[DataRequired()], default=8.0)
     submit = SubmitField('Save Rules')
+
+
+class ShiftForm(FlaskForm):
+    shift_name = StringField('Shift Name', validators=[DataRequired(), Length(2, 50)])
+    start_time = StringField('Start Time (HH:MM)', validators=[DataRequired(), Length(5, 5)])
+    end_time = StringField('End Time (HH:MM)', validators=[DataRequired(), Length(5, 5)])
+    grace_period_mins = IntegerField('Grace Period (minutes)',
+                                      validators=[DataRequired(), NumberRange(0, 120)], default=15)
+    min_working_hours = FloatField('Minimum Working Hours',
+                                    validators=[DataRequired(), NumberRange(1, 24)], default=8.0)
+    late_mark_after_mins = IntegerField('Late Mark After (minutes)',
+                                         validators=[DataRequired(), NumberRange(1, 120)], default=15)
+    overtime_eligible = BooleanField('Overtime Eligible', default=False)
+    is_active = BooleanField('Active', default=True)
+    submit = SubmitField('Save Shift')

@@ -15,9 +15,11 @@ from app.extensions import db
 from app.models import (Employee, User, Leave, Attendance, LeaveBalance,
                         LeavePolicy, Department, Designation,
                         PerformanceReview, PayrollInput, EmployeeDocument,
-                        JobPosting, Candidate, Interview)
+                        JobPosting, Candidate, Interview,
+                        Shift, CompOff, ShiftSwapRequest)
 from app.hr.forms import (EmployeeForm, LeaveActionForm, CheckInOutForm,
-                          AttendanceFilterForm, PerformanceReviewForm,
+                          AttendanceFilterForm, AttendanceOverrideForm,
+                          PerformanceReviewForm,
                           JobPostingForm, CandidateForm, InterviewForm,
                           InterviewFeedbackForm, PayrollInputForm,
                           PayrollGenerateForm, DocumentUploadForm)
@@ -52,6 +54,9 @@ def dashboard():
     recent_leaves = Leave.query.order_by(Leave.created_at.desc()).limit(5).all()
     rules = services.get_attendance_rules()
     unassigned_count = services.get_unassigned_count()
+    pending_swaps = ShiftSwapRequest.query.filter_by(status='Pending').count()
+    pending_comp_offs = CompOff.query.filter_by(status='Earned').count()
+    total_shifts = Shift.query.filter_by(is_active=True).count()
 
     return render_template('hr/dashboard.html',
                            total_employees=total_employees,
@@ -63,7 +68,10 @@ def dashboard():
                            dept_stats=dept_stats,
                            recent_leaves=recent_leaves,
                            rules=rules,
-                           unassigned_count=unassigned_count)
+                           unassigned_count=unassigned_count,
+                           pending_swaps=pending_swaps,
+                           pending_comp_offs=pending_comp_offs,
+                           total_shifts=total_shifts)
 
 
 # ===========================================================================
@@ -112,15 +120,23 @@ def edit_employee(emp_id):
     form = EmployeeForm(obj=emp)
     form.department_id.choices = [(0, '— Select Department —')] + services.get_departments_for_dropdown()
     form.designation_id.choices = [(0, '— Select Designation —')] + services.get_designations_for_dropdown()
+    form.shift_id.choices = [(0, '— General Shift —')] + services.get_shifts_for_dropdown()
+
+    if request.method == 'GET':
+        form.shift_id.data = emp.shift_id or 0
 
     if form.validate_on_submit():
         # emp_code is system-assigned by Admin and immutable — not updated here
         emp.department_id = form.department_id.data if form.department_id.data != 0 else None
         emp.designation_id = form.designation_id.data if form.designation_id.data != 0 else None
+        emp.shift_id = form.shift_id.data if form.shift_id.data != 0 else None
         emp.date_of_joining = form.date_of_joining.data
         emp.salary = form.salary.data or 0
         emp.bank_account = form.bank_account.data or ''
         emp.pan_number = form.pan_number.data or ''
+
+        # Reinitialize leave balances if designation changed (role-based policies)
+        services.initialize_leave_balances(emp.id)
 
         services.log_audit(current_user.id, 'UPDATE', 'Employee', emp.id,
                           f'Updated employee {emp.emp_code}', request.remote_addr or '')
@@ -181,6 +197,7 @@ def complete_profile(emp_id):
     form = EmployeeForm(obj=emp)
     form.department_id.choices = [(0, '— Select Department —')] + services.get_departments_for_dropdown()
     form.designation_id.choices = [(0, '— Select Designation —')] + services.get_designations_for_dropdown()
+    form.shift_id.choices = [(0, '— General Shift —')] + services.get_shifts_for_dropdown()
 
     missing = services.get_missing_fields(emp)
 
@@ -811,3 +828,118 @@ def document_delete(doc_id):
     db.session.commit()
     flash('Document deleted.', 'warning')
     return redirect(url_for('hr.documents', employee=emp_id))
+
+
+# ===========================================================================
+# SHIFT SWAP REQUESTS (NEW)
+# ===========================================================================
+@bp.route('/shift-swaps')
+@module_required('hr')
+def shift_swaps():
+    status_filter = request.args.get('status', '')
+    query = ShiftSwapRequest.query
+    if status_filter:
+        query = query.filter_by(status=status_filter)
+    swaps = query.order_by(ShiftSwapRequest.created_at.desc()).all()
+    return render_template('hr/shift_swap_requests.html', swaps=swaps,
+                           selected_status=status_filter)
+
+
+@bp.route('/shift-swaps/<int:swap_id>/approve', methods=['POST'])
+@module_required('hr')
+def approve_shift_swap(swap_id):
+    success, msg = services.approve_shift_swap(swap_id, current_user.id)
+    if success:
+        services.log_audit(current_user.id, 'APPROVE', 'ShiftSwapRequest', swap_id,
+                          msg, request.remote_addr or '')
+        db.session.commit()
+        flash(msg, 'success')
+    else:
+        flash(msg, 'danger')
+    return redirect(url_for('hr.shift_swaps'))
+
+
+@bp.route('/shift-swaps/<int:swap_id>/reject', methods=['POST'])
+@module_required('hr')
+def reject_shift_swap(swap_id):
+    success, msg = services.reject_shift_swap(swap_id, current_user.id)
+    if success:
+        services.log_audit(current_user.id, 'REJECT', 'ShiftSwapRequest', swap_id,
+                          msg, request.remote_addr or '')
+        db.session.commit()
+        flash(msg, 'success')
+    else:
+        flash(msg, 'danger')
+    return redirect(url_for('hr.shift_swaps'))
+
+
+# ===========================================================================
+# COMP-OFF MANAGEMENT (NEW)
+# ===========================================================================
+@bp.route('/comp-offs')
+@module_required('hr')
+def comp_offs():
+    status_filter = request.args.get('status', '')
+    comps = services.get_comp_offs(status=status_filter or None)
+    return render_template('hr/comp_offs.html', comp_offs=comps,
+                           selected_status=status_filter)
+
+
+@bp.route('/comp-offs/<int:comp_id>/approve', methods=['POST'])
+@module_required('hr')
+def approve_comp_off(comp_id):
+    success, msg = services.approve_comp_off(comp_id, current_user.id)
+    if success:
+        services.log_audit(current_user.id, 'APPROVE', 'CompOff', comp_id,
+                          msg, request.remote_addr or '')
+        db.session.commit()
+        flash(msg, 'success')
+    else:
+        flash(msg, 'danger')
+    return redirect(url_for('hr.comp_offs'))
+
+
+# ===========================================================================
+# ATTENDANCE OVERRIDE & AUTO-ABSENT (NEW)
+# ===========================================================================
+@bp.route('/attendance/override', methods=['GET', 'POST'])
+@module_required('hr')
+def attendance_override():
+    form = AttendanceOverrideForm()
+    employees = Employee.query.order_by(Employee.emp_code).all()
+    form.employee_id.choices = [(0, '— Select Employee —')] + [
+        (e.id, f'{e.emp_code} — {e.user.full_name}') for e in employees
+    ]
+    if form.validate_on_submit():
+        if form.employee_id.data == 0:
+            flash('Please select an employee.', 'danger')
+        else:
+            success, msg = services.override_attendance(
+                form.employee_id.data, form.date.data,
+                form.status.data, form.check_in.data or '',
+                form.check_out.data or '', form.notes.data or ''
+            )
+            if success:
+                services.log_audit(current_user.id, 'OVERRIDE', 'Attendance',
+                                  form.employee_id.data, msg, request.remote_addr or '')
+                db.session.commit()
+                flash(msg, 'success')
+            else:
+                flash(msg, 'danger')
+        return redirect(url_for('hr.attendance_override'))
+    return render_template('hr/attendance_override.html', form=form)
+
+
+@bp.route('/attendance/auto-absent', methods=['POST'])
+@module_required('hr')
+def run_auto_absent():
+    """Manually trigger auto-absent marking for yesterday."""
+    count = services.auto_mark_absent()
+    if count > 0:
+        services.log_audit(current_user.id, 'AUTO_ABSENT', 'Attendance', None,
+                          f'Marked {count} employees absent', request.remote_addr or '')
+        db.session.commit()
+        flash(f'{count} employee(s) marked absent.', 'warning')
+    else:
+        flash('No employees to mark absent.', 'info')
+    return redirect(url_for('hr.attendance'))

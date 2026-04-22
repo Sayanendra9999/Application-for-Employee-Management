@@ -6,7 +6,7 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
         <h4 style="font-weight:700;">Leave Requests</h4>
-        <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">{{ leaves | length }} requests</p>
+        <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">{{ leaves | length }} requests — Multi-step approval (Manager → HR)</p>
     </div>
     <a href="{{ url_for('hr.leave_balances') }}" class="btn btn-outline-primary btn-sm">
         <i class="fas fa-scale-balanced me-1"></i>View Balances
@@ -40,21 +40,49 @@
                     <th>To</th>
                     <th>Days</th>
                     <th>Reason</th>
-                    <th>Status</th>
+                    <th>Manager</th>
+                    <th>HR</th>
+                    <th>Final</th>
                     <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for leave in leaves %}
                 <tr>
-                    <td class="fw-semibold">{{ leave.employee.user.full_name }}</td>
+                    <td class="fw-semibold">
+                        {{ leave.employee.user.full_name }}
+                        <br><small style="color:var(--text-secondary);">{{ leave.employee.emp_code }} · {{ leave.employee.shift_name }}</small>
+                    </td>
                     <td>{{ leave.leave_type }}</td>
                     <td>{{ leave.start_date.strftime('%d %b %Y') }}</td>
                     <td>{{ leave.end_date.strftime('%d %b %Y') }}</td>
                     <td><strong>{{ leave.total_days or leave.calc_days() }}</strong></td>
-                    <td style="font-size:0.85rem; color:var(--text-secondary); max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                    <td style="font-size:0.85rem; color:var(--text-secondary); max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
                         {{ leave.reason or '—' }}
                     </td>
+                    <!-- Manager Status -->
+                    <td>
+                        {% if leave.manager_status == 'Approved' %}
+                        <span class="badge-status badge-approved" title="{{ leave.manager_approver.full_name if leave.manager_approver else '' }}">✓</span>
+                        {% elif leave.manager_status == 'Rejected' %}
+                        <span class="badge-status badge-rejected">✗</span>
+                        {% elif leave.manager_status == 'N/A' %}
+                        <span style="color:var(--text-secondary); font-size:0.75rem;">N/A</span>
+                        {% else %}
+                        <span class="badge-status" style="background:#fef3c7; color:#92400e; font-size:0.7rem;">Pending</span>
+                        {% endif %}
+                    </td>
+                    <!-- HR Status -->
+                    <td>
+                        {% if leave.hr_status == 'Approved' %}
+                        <span class="badge-status badge-approved" title="{{ leave.hr_approver.full_name if leave.hr_approver else '' }}">✓</span>
+                        {% elif leave.hr_status == 'Rejected' %}
+                        <span class="badge-status badge-rejected">✗</span>
+                        {% else %}
+                        <span class="badge-status" style="background:#fef3c7; color:#92400e; font-size:0.7rem;">Pending</span>
+                        {% endif %}
+                    </td>
+                    <!-- Final Status -->
                     <td>
                         {% if leave.status == 'Pending' %}
                         <span class="badge-status" style="background:#fef3c7; color:#92400e;">Pending</span>
@@ -69,7 +97,7 @@
                         <form method="POST" action="{{ url_for('hr.leave_action', leave_id=leave.id) }}" class="d-inline">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <input type="hidden" name="status" value="Approved">
-                            <button type="submit" class="btn-action" title="Approve" style="color:var(--success);">
+                            <button type="submit" class="btn-action" title="Approve (HR)" style="color:var(--success);">
                                 <i class="fas fa-check"></i>
                             </button>
                         </form>
@@ -89,7 +117,7 @@
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="8" class="text-center py-4" style="color:var(--text-secondary);">No leave requests found</td></tr>
+                <tr><td colspan="10" class="text-center py-4" style="color:var(--text-secondary);">No leave requests found</td></tr>
                 {% endfor %}
             </tbody>
         </table>

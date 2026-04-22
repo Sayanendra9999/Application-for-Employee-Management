@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS employees (
     emp_code VARCHAR(20) NOT NULL UNIQUE,
     department_id INTEGER REFERENCES departments(id),
     designation_id INTEGER REFERENCES designations(id),
+    shift_id INTEGER REFERENCES shifts(id),
     date_of_joining DATE,
     salary REAL DEFAULT 0,
     bank_account VARCHAR(30) DEFAULT '',
@@ -55,6 +56,10 @@ CREATE TABLE IF NOT EXISTS leaves (
     reason TEXT DEFAULT '',
     rejection_reason TEXT DEFAULT '',
     approved_by INTEGER REFERENCES users(id),
+    manager_status VARCHAR(20) DEFAULT 'Pending',
+    manager_approved_by INTEGER REFERENCES users(id),
+    hr_status VARCHAR(20) DEFAULT 'Pending',
+    hr_approved_by INTEGER REFERENCES users(id),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -67,6 +72,7 @@ CREATE TABLE IF NOT EXISTS attendance (
     working_hours REAL DEFAULT 0.0,
     status VARCHAR(20) DEFAULT 'Present',
     notes VARCHAR(250) DEFAULT '',
+    is_overnight BOOLEAN DEFAULT 0,
     UNIQUE(employee_id, date)
 );
 
@@ -194,11 +200,30 @@ CREATE TABLE IF NOT EXISTS designations (
 
 CREATE TABLE IF NOT EXISTS leave_policies (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    leave_type VARCHAR(50) NOT NULL UNIQUE,
+    leave_type VARCHAR(50) NOT NULL,
+    designation_id INTEGER REFERENCES designations(id),
     total_days INTEGER NOT NULL DEFAULT 12,
     carry_forward BOOLEAN DEFAULT 0,
     max_carry_days INTEGER DEFAULT 0,
+    monthly_accrual BOOLEAN DEFAULT 0,
+    encashment_allowed BOOLEAN DEFAULT 0,
+    max_per_request INTEGER,
+    blackout_dates TEXT DEFAULT '',
     description VARCHAR(250) DEFAULT '',
+    is_active BOOLEAN DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(leave_type, designation_id)
+);
+
+CREATE TABLE IF NOT EXISTS shifts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    shift_name VARCHAR(50) NOT NULL UNIQUE,
+    start_time VARCHAR(5) NOT NULL,
+    end_time VARCHAR(5) NOT NULL,
+    grace_period_mins INTEGER DEFAULT 15,
+    min_working_hours REAL DEFAULT 8.0,
+    late_mark_after_mins INTEGER DEFAULT 15,
+    overtime_eligible BOOLEAN DEFAULT 0,
     is_active BOOLEAN DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -294,4 +319,31 @@ CREATE TABLE IF NOT EXISTS employee_expenses (
     status VARCHAR(20) DEFAULT 'Pending',
     reviewed_by INTEGER REFERENCES users(id),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- SHIFT & ATTENDANCE ADVANCED TABLES
+-- ═══════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS comp_offs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+    earned_date DATE NOT NULL,
+    hours_extra REAL DEFAULT 0.0,
+    status VARCHAR(20) DEFAULT 'Earned',
+    used_date DATE,
+    approved_by INTEGER REFERENCES users(id),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS shift_swap_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+    current_shift_id INTEGER REFERENCES shifts(id),
+    requested_shift_id INTEGER NOT NULL REFERENCES shifts(id),
+    reason TEXT DEFAULT '',
+    status VARCHAR(20) DEFAULT 'Pending',
+    reviewed_by INTEGER REFERENCES users(id),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    reviewed_at DATETIME
 );

@@ -3,8 +3,8 @@
 {% block page_title %}{{ title }}{% endblock %}
 
 {% block content %}
-<div class="mb-3">
-    <a href="{{ url_for('admin.leave_policies') }}" class="btn btn-outline-primary btn-sm">
+<div class="mb-4">
+    <a href="{{ url_for('admin.leave_policies') }}" class="btn btn-outline-secondary btn-sm">
         <i class="fas fa-arrow-left me-1"></i>Back to Leave Policies
     </a>
 </div>
@@ -12,36 +12,78 @@
 <div class="form-card">
     <form method="POST" novalidate>
         {{ form.hidden_tag() }}
+
         <div class="row g-3">
             <div class="col-md-6">
                 {{ form.leave_type.label(class="form-label") }}
                 {{ form.leave_type(class="form-control", placeholder="e.g. Casual Leave") }}
             </div>
+
             <div class="col-md-6">
+                {{ form.designation_id.label(class="form-label") }}
+                {{ form.designation_id(class="form-select") }}
+                <small class="text-muted">Select a designation/role or leave as "Global" for all employees</small>
+            </div>
+
+            <div class="col-md-4">
                 {{ form.total_days.label(class="form-label") }}
-                {{ form.total_days(class="form-control") }}
-            </div>
-            <div class="col-md-6">
-                <div class="form-check form-switch mt-3">
-                    {{ form.carry_forward(class="form-check-input", id="carry_forward") }}
-                    <label class="form-check-label fw-semibold" for="carry_forward">Allow Carry Forward</label>
+                <div class="input-group">
+                    {{ form.total_days(class="form-control") }}
+                    <span class="input-group-text">days/year</span>
                 </div>
             </div>
-            <div class="col-md-6">
+
+            <div class="col-md-4">
+                {{ form.max_per_request.label(class="form-label") }}
+                <div class="input-group">
+                    {{ form.max_per_request(class="form-control", placeholder="Optional") }}
+                    <span class="input-group-text">days</span>
+                </div>
+                <small class="text-muted">Leave blank for no limit</small>
+            </div>
+
+            <div class="col-md-4">
                 {{ form.max_carry_days.label(class="form-label") }}
-                {{ form.max_carry_days(class="form-control") }}
-            </div>
-            <div class="col-12">
-                {{ form.description.label(class="form-label") }}
-                {{ form.description(class="form-control", rows=2, placeholder="Policy details...") }}
-            </div>
-            <div class="col-12">
-                <div class="form-check form-switch">
-                    {{ form.is_active(class="form-check-input", id="is_active") }}
-                    <label class="form-check-label fw-semibold" for="is_active">Active Policy</label>
+                <div class="input-group">
+                    {{ form.max_carry_days(class="form-control") }}
+                    <span class="input-group-text">days</span>
                 </div>
+            </div>
+
+            <!-- Toggle Options Row -->
+            <div class="col-12">
+                <div class="d-flex flex-wrap gap-4 mt-2">
+                    <div class="form-check form-switch">
+                        {{ form.carry_forward(class="form-check-input") }}
+                        {{ form.carry_forward.label(class="form-check-label") }}
+                    </div>
+                    <div class="form-check form-switch">
+                        {{ form.monthly_accrual(class="form-check-input") }}
+                        {{ form.monthly_accrual.label(class="form-check-label") }}
+                    </div>
+                    <div class="form-check form-switch">
+                        {{ form.encashment_allowed(class="form-check-input") }}
+                        {{ form.encashment_allowed.label(class="form-check-label") }}
+                    </div>
+                    <div class="form-check form-switch">
+                        {{ form.is_active(class="form-check-input") }}
+                        {{ form.is_active.label(class="form-check-label") }}
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                {{ form.description.label(class="form-label") }}
+                {{ form.description(class="form-control", rows=2) }}
+            </div>
+
+            <div class="col-md-6">
+                {{ form.blackout_dates.label(class="form-label") }}
+                {{ form.blackout_dates(class="form-control", rows=2, placeholder='[{"start":"2026-12-25","end":"2026-12-31"}]') }}
+                <small class="text-muted">JSON array of date ranges when this leave type is blocked</small>
             </div>
         </div>
+
         <hr class="my-4">
         <div class="d-flex gap-2">
             {{ form.submit(class="btn btn-primary") }}

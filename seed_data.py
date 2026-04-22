@@ -13,7 +13,8 @@ from app.models import (User, Module, UserModule, Employee, Leave, LeaveBalance,
                         Expense, Invoice, SalaryRecord,
                         Department, Designation, LeavePolicy, AttendanceRule,
                         PerformanceReview, JobPosting, Candidate, Interview,
-                        ProfileUpdateRequest, EmployeeExpense)
+                        ProfileUpdateRequest, EmployeeExpense,
+                        Shift, CompOff, ShiftSwapRequest)
 
 
 def seed():
@@ -95,17 +96,52 @@ def seed():
 
         # ── Leave Policies (Admin-managed) ───────────────────────────────
         leave_policies = [
+            # Global policies (applicable to all designations by default)
             LeavePolicy(leave_type='Casual Leave', total_days=12,
                         carry_forward=False, description='For personal/family reasons'),
             LeavePolicy(leave_type='Sick Leave', total_days=10,
                         carry_forward=False, description='For health-related absences'),
             LeavePolicy(leave_type='Earned Leave', total_days=15,
                         carry_forward=True, max_carry_days=5,
+                        monthly_accrual=True, encashment_allowed=True,
                         description='Accrued leave, can carry forward up to 5 days'),
         ]
         db.session.add_all(leave_policies)
         db.session.flush()
-        print("[OK] Leave policies created.")
+        print("[OK] Global leave policies created.")
+
+        # Designation-specific leave policies (override global for certain roles)
+        # Find some designations for role-based policies
+        junior_dev = desig_map.get(('Junior Developer', dept_map['ENG'].id))
+        tech_lead = desig_map.get(('Tech Lead', dept_map['ENG'].id))
+        eng_mgr = desig_map.get(('Engineering Manager', dept_map['ENG'].id))
+        hr_mgr = desig_map.get(('HR Manager', dept_map['HR'].id))
+
+        role_policies = []
+        if junior_dev:
+            role_policies.append(LeavePolicy(
+                leave_type='Casual Leave', designation_id=junior_dev.id,
+                total_days=8, carry_forward=False, max_per_request=3,
+                description='Junior level: 8 CL/year, max 3 per request'
+            ))
+        if tech_lead:
+            role_policies.append(LeavePolicy(
+                leave_type='Casual Leave', designation_id=tech_lead.id,
+                total_days=15, carry_forward=True, max_carry_days=3,
+                encashment_allowed=True,
+                description='Lead level: 15 CL/year, carry-forward enabled'
+            ))
+        if hr_mgr:
+            role_policies.append(LeavePolicy(
+                leave_type='Earned Leave', designation_id=hr_mgr.id,
+                total_days=20, carry_forward=True, max_carry_days=10,
+                monthly_accrual=True, encashment_allowed=True,
+                description='Manager level: 20 EL/year, carry-forward up to 10'
+            ))
+        if role_policies:
+            db.session.add_all(role_policies)
+            db.session.flush()
+        print(f"[OK] {len(role_policies)} designation-specific leave policies created.")
 
         # ── Attendance Rules (Admin-managed) ─────────────────────────────
         att_rule = AttendanceRule(
@@ -114,7 +150,24 @@ def seed():
         )
         db.session.add(att_rule)
         db.session.flush()
-        print("[OK] Attendance rules configured.")
+        print("[OK] General shift (Attendance Rules) configured.")
+
+        # ── Shifts (Admin-managed) ────────────────────────────────────────
+        shifts = [
+            Shift(shift_name='Morning', start_time='06:00', end_time='14:00',
+                  grace_period_mins=10, min_working_hours=8.0,
+                  late_mark_after_mins=15, overtime_eligible=True),
+            Shift(shift_name='Afternoon', start_time='14:00', end_time='22:00',
+                  grace_period_mins=10, min_working_hours=8.0,
+                  late_mark_after_mins=15, overtime_eligible=True),
+            Shift(shift_name='Night', start_time='22:00', end_time='06:00',
+                  grace_period_mins=15, min_working_hours=8.0,
+                  late_mark_after_mins=20, overtime_eligible=True),
+        ]
+        db.session.add_all(shifts)
+        db.session.flush()
+        shift_map = {s.shift_name: s for s in shifts}
+        print(f"[OK] {len(shifts)} shifts created (Morning, Afternoon, Night).")
 
         # ── Users ────────────────────────────────────────────────────────
         users_data = [
@@ -218,7 +271,12 @@ def seed():
             db.session.flush()
             emp_objects[ed['user']] = emp
 
-        print("[OK] Employee records created.")
+        # Assign shifts to some employees
+        emp_objects['john_doe'].shift_id = shift_map['Morning'].id
+        emp_objects['jane_smith'].shift_id = shift_map['Afternoon'].id
+        emp_objects['bob_wilson'].shift_id = shift_map['Night'].id
+
+        print("[OK] Employee records created (with shift assignments).")
 
         # ── Leave Balances (initialized from policies) ───────────────────
         for emp_key, emp_obj in emp_objects.items():
@@ -675,6 +733,43 @@ def seed():
             db.session.add(req)
         print("[OK] Profile update requests created.")
 
+        # ── Comp-Off Records ─────────────────────────────────────────────
+        comp_offs_data = [
+            {'emp': 'john_doe', 'date': date(2026, 4, 10), 'hours': 2.5, 'status': 'Earned'},
+            {'emp': 'bob_wilson', 'date': date(2026, 4, 8), 'hours': 1.5, 'status': 'Earned'},
+            {'emp': 'john_doe', 'date': date(2026, 3, 25), 'hours': 3.0, 'status': 'Used',
+             'used_date': date(2026, 4, 1)},
+        ]
+        for co in comp_offs_data:
+            comp = CompOff(
+                employee_id=emp_objects[co['emp']].id,
+                earned_date=co['date'],
+                hours_extra=co['hours'],
+                status=co['status'],
+                used_date=co.get('used_date')
+            )
+            db.session.add(comp)
+        print("[OK] Comp-off records created.")
+
+        # ── Shift Swap Requests ──────────────────────────────────────────
+        swap1 = ShiftSwapRequest(
+            employee_id=emp_objects['bob_wilson'].id,
+            current_shift_id=shift_map['Night'].id,
+            requested_shift_id=shift_map['Morning'].id,
+            reason='Night shift affecting health, requesting morning shift',
+            status='Pending'
+        )
+        swap2 = ShiftSwapRequest(
+            employee_id=emp_objects['john_doe'].id,
+            current_shift_id=shift_map['Morning'].id,
+            requested_shift_id=shift_map['Afternoon'].id,
+            reason='Personal schedule change',
+            status='Approved',
+            reviewed_by=user_objects['hr_manager'].id
+        )
+        db.session.add_all([swap1, swap2])
+        print("[OK] Shift swap requests created.")
+
         # ── Additional Employee Notifications ────────────────────────────
         emp_notifs = [
             {'user': 'john_doe', 'title': 'Leave Approved',
@@ -715,8 +810,9 @@ def seed():
         print("\nAdmin Configuration:")
         print(f"  Departments:   {len(departments)}")
         print(f"  Designations:  {len(designations)}")
-        print(f"  Leave Policies: {len(leave_policies)}")
-        print(f"  Attendance:    {att_rule.work_start}-{att_rule.work_end}, late>{att_rule.late_threshold_mins}min")
+        print(f"  Leave Policies: {len(leave_policies)} global + {len(role_policies)} role-specific")
+        print(f"  Shifts:        {len(shifts)} (Morning, Afternoon, Night)")
+        print(f"  Attendance:    {att_rule.work_start}-{att_rule.work_end} (General Shift)")
         print("\nTest Accounts:")
         print("-" * 60)
         print(f"  {'Username':<16} {'Password':<12} {'Role':<18} Modules")

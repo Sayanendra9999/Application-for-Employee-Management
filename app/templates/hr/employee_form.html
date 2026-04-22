@@ -42,6 +42,11 @@
                 <small class="text-muted">Configured by Admin</small>
             </div>
             <div class="col-md-6">
+                {{ form.shift_id.label(class="form-label") }}
+                {{ form.shift_id(class="form-select") }}
+                <small class="text-muted">Leave as "General Shift" for default timing</small>
+            </div>
+            <div class="col-md-6">
                 {{ form.date_of_joining.label(class="form-label") }}
                 {{ form.date_of_joining(class="form-control", type="date") }}
             </div>

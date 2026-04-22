@@ -124,22 +124,56 @@ class Designation(db.Model):
 
 
 # ---------------------------------------------------------------------------
+# Shift (Admin-managed — Morning, Afternoon, Night, etc.)
+# ---------------------------------------------------------------------------
+class Shift(db.Model):
+    __tablename__ = 'shifts'
+
+    id = db.Column(db.Integer, primary_key=True)
+    shift_name = db.Column(db.String(50), unique=True, nullable=False)    # Morning, Afternoon, Night
+    start_time = db.Column(db.String(5), nullable=False)                  # HH:MM
+    end_time = db.Column(db.String(5), nullable=False)
+    grace_period_mins = db.Column(db.Integer, default=15)
+    min_working_hours = db.Column(db.Float, default=8.0)
+    late_mark_after_mins = db.Column(db.Integer, default=15)              # Late after start + this
+    overtime_eligible = db.Column(db.Boolean, default=False)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    employees = db.relationship('Employee', backref='shift', lazy='dynamic')
+
+    def __repr__(self):
+        return f'<Shift {self.shift_name} {self.start_time}-{self.end_time}>'
+
+
+# ---------------------------------------------------------------------------
 # LeavePolicy (Admin-managed — defines leave types and quotas)
+# Optionally linked to Designation for role-based policies.
 # ---------------------------------------------------------------------------
 class LeavePolicy(db.Model):
     __tablename__ = 'leave_policies'
 
     id = db.Column(db.Integer, primary_key=True)
-    leave_type = db.Column(db.String(50), unique=True, nullable=False)    # Casual, Sick, Earned, etc.
+    leave_type = db.Column(db.String(50), nullable=False)                 # Casual, Sick, Earned, etc.
+    designation_id = db.Column(db.Integer, db.ForeignKey('designations.id'), nullable=True)  # NULL = all
     total_days = db.Column(db.Integer, nullable=False, default=12)
     carry_forward = db.Column(db.Boolean, default=False)
     max_carry_days = db.Column(db.Integer, default=0)
+    monthly_accrual = db.Column(db.Boolean, default=False)
+    encashment_allowed = db.Column(db.Boolean, default=False)
+    max_per_request = db.Column(db.Integer, nullable=True)                # Max days per single request
+    blackout_dates = db.Column(db.Text, default='')                       # JSON: [{"start":"...","end":"..."}]
     description = db.Column(db.String(250), default='')
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    designation = db.relationship('Designation', backref='leave_policies')
+
+    __table_args__ = (db.UniqueConstraint('leave_type', 'designation_id', name='uq_leave_type_desig'),)
+
     def __repr__(self):
-        return f'<LeavePolicy {self.leave_type} ({self.total_days}d)>'
+        desig = self.designation.title if self.designation else 'Global'
+        return f'<LeavePolicy {self.leave_type} ({self.total_days}d) [{desig}]>'
 
 
 # ---------------------------------------------------------------------------
@@ -197,6 +231,7 @@ class Employee(db.Model):
     emp_code = db.Column(db.String(20), unique=True, nullable=False)
     department_id = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
     designation_id = db.Column(db.Integer, db.ForeignKey('designations.id'), nullable=True)
+    shift_id = db.Column(db.Integer, db.ForeignKey('shifts.id'), nullable=True)   # NULL = General Shift
     date_of_joining = db.Column(db.Date, default=date.today)
     salary = db.Column(db.Float, default=0.0)
     bank_account = db.Column(db.String(30), default='')
@@ -210,6 +245,8 @@ class Employee(db.Model):
     leave_balances = db.relationship('LeaveBalance', backref='employee', lazy='dynamic')
     documents = db.relationship('EmployeeDocument', backref='employee', lazy='dynamic')
     payroll_inputs = db.relationship('PayrollInput', backref='employee', lazy='dynamic')
+    comp_offs = db.relationship('CompOff', backref='employee', lazy='dynamic')
+    shift_swap_requests = db.relationship('ShiftSwapRequest', backref='employee', lazy='dynamic')
 
     @property
     def department_name(self):
@@ -218,6 +255,10 @@ class Employee(db.Model):
     @property
     def designation_title(self):
         return self.designation.title if self.designation else 'Unassigned'
+
+    @property
+    def shift_name(self):
+        return self.shift.shift_name if self.shift else 'General'
 
     def __repr__(self):
         return f'<Employee {self.emp_code}>'
@@ -239,9 +280,16 @@ class Leave(db.Model):
     reason = db.Column(db.Text, default='')
     rejection_reason = db.Column(db.Text, default='')
     approved_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    # Multi-step approval workflow
+    manager_status = db.Column(db.String(20), default='Pending')   # Pending, Approved, Rejected, N/A
+    manager_approved_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    hr_status = db.Column(db.String(20), default='Pending')        # Pending, Approved, Rejected
+    hr_approved_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     approver = db.relationship('User', foreign_keys=[approved_by])
+    manager_approver = db.relationship('User', foreign_keys=[manager_approved_by])
+    hr_approver = db.relationship('User', foreign_keys=[hr_approved_by])
 
     def calc_days(self):
         """Calculate number of leave days (excluding weekends)."""
@@ -295,19 +343,24 @@ class Attendance(db.Model):
     check_in = db.Column(db.String(10), default='')     # stored as HH:MM string for SQLite compat
     check_out = db.Column(db.String(10), default='')
     working_hours = db.Column(db.Float, default=0.0)     # Calculated hours
-    status = db.Column(db.String(20), default='Present')  # Present, Absent, Half-Day, Late
+    status = db.Column(db.String(20), default='Present')  # Present, Absent, Half-Day, Late, On Leave
     notes = db.Column(db.String(250), default='')
+    is_overnight = db.Column(db.Boolean, default=False)   # Night shift: checkout is next day
 
     __table_args__ = (db.UniqueConstraint('employee_id', 'date', name='uq_emp_date'),)
 
     def calc_working_hours(self):
-        """Calculate hours between check_in and check_out."""
+        """Calculate hours between check_in and check_out.
+        Handles night shifts (checkout next day) via is_overnight flag."""
         if not self.check_in or not self.check_out:
             return 0.0
         try:
             h1, m1 = map(int, self.check_in.split(':'))
             h2, m2 = map(int, self.check_out.split(':'))
             total_mins = (h2 * 60 + m2) - (h1 * 60 + m1)
+            # Night shift: checkout is next day, so add 24 hours
+            if total_mins < 0 or self.is_overnight:
+                total_mins += 24 * 60
             return round(max(0, total_mins / 60), 2)
         except (ValueError, AttributeError):
             return 0.0
@@ -707,3 +760,52 @@ class EmployeeExpense(db.Model):
 
     def __repr__(self):
         return f'<EmployeeExpense {self.category} ₹{self.amount} emp#{self.employee_id}>'
+
+
+# ===========================================================================
+# SHIFT & ATTENDANCE ADVANCED MODELS
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# CompOff — Compensatory off earned from overtime work
+# ---------------------------------------------------------------------------
+class CompOff(db.Model):
+    __tablename__ = 'comp_offs'
+
+    id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey('employees.id', ondelete='CASCADE'), nullable=False)
+    earned_date = db.Column(db.Date, nullable=False)                # Date overtime was worked
+    hours_extra = db.Column(db.Float, default=0.0)                  # Extra hours worked
+    status = db.Column(db.String(20), default='Earned')             # Earned, Used, Expired
+    used_date = db.Column(db.Date, nullable=True)                   # Date the comp-off was consumed
+    approved_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    approver = db.relationship('User', foreign_keys=[approved_by])
+
+    def __repr__(self):
+        return f'<CompOff emp#{self.employee_id} {self.earned_date} {self.status}>'
+
+
+# ---------------------------------------------------------------------------
+# ShiftSwapRequest — Employee requests HR to change their shift
+# ---------------------------------------------------------------------------
+class ShiftSwapRequest(db.Model):
+    __tablename__ = 'shift_swap_requests'
+
+    id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey('employees.id', ondelete='CASCADE'), nullable=False)
+    current_shift_id = db.Column(db.Integer, db.ForeignKey('shifts.id'), nullable=True)
+    requested_shift_id = db.Column(db.Integer, db.ForeignKey('shifts.id'), nullable=False)
+    reason = db.Column(db.Text, default='')
+    status = db.Column(db.String(20), default='Pending')            # Pending, Approved, Rejected
+    reviewed_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    reviewed_at = db.Column(db.DateTime, nullable=True)
+
+    reviewer = db.relationship('User', foreign_keys=[reviewed_by])
+    current_shift = db.relationship('Shift', foreign_keys=[current_shift_id])
+    requested_shift = db.relationship('Shift', foreign_keys=[requested_shift_id])
+
+    def __repr__(self):
+        return f'<ShiftSwapRequest emp#{self.employee_id} {self.status}>'

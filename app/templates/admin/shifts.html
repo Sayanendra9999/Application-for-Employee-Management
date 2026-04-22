@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Shifts — Enterprise Portal{% endblock %}
+{% block page_title %}Shift Management{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 style="font-weight:700;">Shift Types</h4>
+        <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">Define shift schedules with timing, grace periods, and overtime rules</p>
+    </div>
+    <a href="{{ url_for('admin.add_shift') }}" class="btn btn-primary">
+        <i class="fas fa-plus me-2"></i>Add Shift
+    </a>
+</div>
+
+<div class="data-card">
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Shift Name</th>
+                    <th>Timing</th>
+                    <th>Grace Period</th>
+                    <th>Min Hours</th>
+                    <th>Late After</th>
+                    <th>OT Eligible</th>
+                    <th>Employees</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in shifts %}
+                <tr>
+                    <td class="fw-semibold">
+                        <i class="fas fa-clock me-1" style="color:var(--primary);"></i>
+                        {{ s.shift_name }}
+                    </td>
+                    <td>
+                        <span style="font-weight:600;">{{ s.start_time }}</span>
+                        <i class="fas fa-arrow-right mx-1" style="font-size:0.7rem; color:var(--text-secondary);"></i>
+                        <span style="font-weight:600;">{{ s.end_time }}</span>
+                    </td>
+                    <td>{{ s.grace_period_mins }} mins</td>
+                    <td>{{ s.min_working_hours }} hrs</td>
+                    <td>{{ s.late_mark_after_mins }} mins</td>
+                    <td>
+                        {% if s.overtime_eligible %}
+                        <span class="badge-status badge-approved">Yes</span>
+                        {% else %}
+                        <span class="badge-status badge-planning">No</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge bg-primary">{{ s.employees.count() }}</span>
+                    </td>
+                    <td>
+                        {% if s.is_active %}
+                        <span class="badge-status badge-approved">Active</span>
+                        {% else %}
+                        <span class="badge-status badge-rejected">Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{{ url_for('admin.edit_shift', shift_id=s.id) }}" class="btn-action" title="Edit">
+                            <i class="fas fa-pen-to-square"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="9" class="text-center py-4" style="color:var(--text-secondary);">No shifts configured yet</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- General Shift Info -->
+<div class="mt-4" style="background:linear-gradient(135deg,#dbeafe,#eff6ff); border:2px solid #60a5fa; border-radius:14px; padding:16px 22px;">
+    <div class="d-flex align-items-center gap-3">
+        <div style="width:40px; height:40px; background:#3b82f6; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+            <i class="fas fa-info-circle" style="color:#fff; font-size:1rem;"></i>
+        </div>
+        <div>
+            <h6 style="font-weight:700; margin-bottom:2px; color:#1e40af;">General Shift (Default)</h6>
+            <p style="font-size:0.82rem; color:#1d4ed8; margin:0;">
+                Employees not assigned to any specific shift use the
+                <a href="{{ url_for('admin.attendance_rules') }}" style="font-weight:600;">Attendance Rules</a>
+                configuration as their default schedule.
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}

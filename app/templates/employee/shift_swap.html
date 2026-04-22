@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Shift Swap Request — Enterprise Portal{% endblock %}
+{% block page_title %}Shift Swap Request{% endblock %}
+
+{% block content %}
+<!-- Current Shift Info -->
+<div style="background:var(--bg-card); border:1px solid var(--border-color); border-radius:12px; padding:16px 22px; margin-bottom:24px;">
+    <div class="d-flex align-items-center gap-3">
+        <div style="width:44px; height:44px; background:linear-gradient(135deg,var(--primary),var(--primary-dark)); border-radius:12px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+            <i class="fas fa-clock" style="color:#fff; font-size:1.1rem;"></i>
+        </div>
+        <div>
+            <h6 style="font-weight:700; margin-bottom:2px;">Current Shift: {{ my_shift.shift_name if my_shift else 'General' }}</h6>
+            <p style="font-size:0.82rem; color:var(--text-secondary); margin:0;">
+                {% if my_shift %}
+                {{ my_shift.start_time }} — {{ my_shift.end_time }} | Grace: {{ my_shift.grace_period_mins }}min
+                {% else %}
+                Using default attendance rules
+                {% endif %}
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- Submit Swap Request -->
+<div class="form-card mb-4">
+    <h5 style="font-weight:700; margin-bottom:16px;">
+        <i class="fas fa-arrows-rotate me-2" style="color:var(--primary);"></i>Request Shift Change
+    </h5>
+    <form method="POST" novalidate>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label class="form-label fw-semibold">Requested Shift</label>
+                <select name="shift_id" class="form-select" required>
+                    <option value="">— Select Shift —</option>
+                    {% for s in shifts %}
+                    {% if (not my_shift and s.id) or (my_shift and s.id != my_shift.id) %}
+                    <option value="{{ s.id }}">{{ s.shift_name }} ({{ s.start_time }}–{{ s.end_time }})</option>
+                    {% endif %}
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label fw-semibold">Reason</label>
+                <textarea name="reason" class="form-control" rows="2" placeholder="Why do you want to change shifts?"></textarea>
+            </div>
+        </div>
+        <div class="mt-3">
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-paper-plane me-1"></i>Submit Request
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Request History -->
+<div class="data-card">
+    <div class="card-header">
+        <h5><i class="fas fa-history me-2"></i>Request History</h5>
+    </div>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>From Shift</th>
+                    <th>To Shift</th>
+                    <th>Reason</th>
+                    <th>Date</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in swap_requests %}
+                <tr>
+                    <td>{{ r.current_shift.shift_name if r.current_shift else 'General' }}</td>
+                    <td class="fw-semibold" style="color:var(--primary);">{{ r.requested_shift.shift_name if r.requested_shift else '—' }}</td>
+                    <td style="font-size:0.85rem;">{{ r.reason or '—' }}</td>
+                    <td>{{ r.created_at.strftime('%d %b %Y') }}</td>
+                    <td>
+                        {% if r.status == 'Pending' %}
+                        <span class="badge-status badge-planning">Pending</span>
+                        {% elif r.status == 'Approved' %}
+                        <span class="badge-status badge-approved">Approved</span>
+                        {% else %}
+                        <span class="badge-status badge-rejected">Rejected</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="text-center py-4" style="color:var(--text-secondary);">No shift swap requests yet</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

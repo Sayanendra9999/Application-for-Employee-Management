@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Attendance Override — Enterprise Portal{% endblock %}
+{% block page_title %}Attendance Override{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <a href="{{ url_for('hr.attendance') }}" class="btn btn-outline-secondary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Back to Attendance
+    </a>
+</div>
+
+<div class="form-card">
+    <h5 style="font-weight:700; margin-bottom:16px;">
+        <i class="fas fa-pen-to-square me-2" style="color:var(--primary);"></i>Manually Override Attendance
+    </h5>
+    <p style="color:var(--text-secondary); font-size:0.85rem; margin-bottom:20px;">
+        Use this to correct or override an employee's attendance record for a specific date.
+    </p>
+    <form method="POST" novalidate>
+        {{ form.hidden_tag() }}
+        <div class="row g-3">
+            <div class="col-md-6">
+                {{ form.employee_id.label(class="form-label") }}
+                {{ form.employee_id(class="form-select") }}
+            </div>
+            <div class="col-md-3">
+                {{ form.date.label(class="form-label") }}
+                {{ form.date(class="form-control", type="date") }}
+            </div>
+            <div class="col-md-3">
+                {{ form.status.label(class="form-label") }}
+                {{ form.status(class="form-select") }}
+            </div>
+            <div class="col-md-3">
+                {{ form.check_in.label(class="form-label") }}
+                {{ form.check_in(class="form-control", type="time", placeholder="09:00") }}
+            </div>
+            <div class="col-md-3">
+                {{ form.check_out.label(class="form-label") }}
+                {{ form.check_out(class="form-control", type="time", placeholder="18:00") }}
+            </div>
+            <div class="col-md-6">
+                {{ form.notes.label(class="form-label") }}
+                {{ form.notes(class="form-control", rows=2, placeholder="Reason for override") }}
+            </div>
+        </div>
+        <hr class="my-4">
+        <div class="d-flex gap-2">
+            {{ form.submit(class="btn btn-primary") }}
+            <a href="{{ url_for('hr.attendance') }}" class="btn btn-outline-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

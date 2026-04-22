@@ -14,6 +14,7 @@ class EmployeeForm(FlaskForm):
     emp_code = StringField('Employee Code', validators=[DataRequired(), Length(2, 20)])
     department_id = SelectField('Department', coerce=int, validators=[DataRequired()])
     designation_id = SelectField('Designation', coerce=int, validators=[DataRequired()])
+    shift_id = SelectField('Assigned Shift', coerce=int, validators=[Optional()])
     date_of_joining = DateField('Date of Joining', validators=[Optional()])
     salary = FloatField('Monthly Salary (₹)', validators=[Optional()])
     bank_account = StringField('Bank Account', validators=[Optional(), Length(0, 30)])
@@ -41,11 +42,25 @@ class AttendanceFilterForm(FlaskForm):
     department_id = SelectField('Department', coerce=int, validators=[Optional()])
     status = SelectField('Status', choices=[
         ('', 'All'), ('Present', 'Present'), ('Late', 'Late'),
-        ('Absent', 'Absent'), ('Half-Day', 'Half-Day')
+        ('Absent', 'Absent'), ('Half-Day', 'Half-Day'), ('On Leave', 'On Leave')
     ], validators=[Optional()])
     date_from = DateField('From', validators=[Optional()])
     date_to = DateField('To', validators=[Optional()])
     submit = SubmitField('Filter')
+
+
+class AttendanceOverrideForm(FlaskForm):
+    """HR override for attendance records."""
+    employee_id = SelectField('Employee', coerce=int, validators=[DataRequired()])
+    date = DateField('Date', validators=[DataRequired()])
+    status = SelectField('Status', choices=[
+        ('Present', 'Present'), ('Late', 'Late'),
+        ('Absent', 'Absent'), ('Half-Day', 'Half-Day'), ('On Leave', 'On Leave')
+    ], validators=[DataRequired()])
+    check_in = StringField('Check-in (HH:MM)', validators=[Optional(), Length(0, 5)])
+    check_out = StringField('Check-out (HH:MM)', validators=[Optional(), Length(0, 5)])
+    notes = TextAreaField('Notes', validators=[Optional(), Length(0, 250)])
+    submit = SubmitField('Override Attendance')
 
 
 class LeaveBalanceForm(FlaskForm):
