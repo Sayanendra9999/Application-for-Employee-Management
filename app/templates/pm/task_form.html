@@ -26,11 +26,15 @@
                 {{ form.assigned_to.label(class="form-label") }}
                 {{ form.assigned_to(class="form-select") }}
             </div>
-            <div class="col-md-6">
+            <div class="col-md-4">
                 {{ form.due_date.label(class="form-label") }}
                 {{ form.due_date(class="form-control", type="date") }}
             </div>
-            <div class="col-md-6">
+            <div class="col-md-4">
+                {{ form.estimated_hours.label(class="form-label") }}
+                {{ form.estimated_hours(class="form-control", type="number", step="0.5", placeholder="e.g. 20") }}
+            </div>
+            <div class="col-md-4">
                 {{ form.priority.label(class="form-label") }}
                 {{ form.priority(class="form-select") }}
             </div>

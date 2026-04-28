@@ -16,9 +16,11 @@
 <!-- Dashboard Header Actions -->
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h4 style="font-weight:700; margin:0;">Dashboard Overview</h4>
+    {% if current_user.is_admin %}
     <a href="{{ url_for('pm.add_project') }}" class="btn btn-primary shadow-sm" id="btn-new-project-dashboard">
         <i class="fas fa-plus me-2"></i>New Project
     </a>
+    {% endif %}
 </div>
 
 <style>

@@ -440,6 +440,44 @@ def update_task_status(task_id):
     return jsonify({'success': False, 'message': msg}), 400
 
 
+@bp.route('/tasks/<int:task_id>/log-hours', methods=['POST'])
+@module_required('employee')
+def log_task_hours(task_id):
+    """Employee logs actual hours for their task."""
+    from app.models import Task
+    from werkzeug.exceptions import abort
+    from app.employee.utils import create_notification as notify
+
+    task = Task.query.get_or_404(task_id)
+    if task.assigned_to != current_user.id:
+        abort(403)
+        
+    actual_hours = request.form.get('actual_hours', type=float)
+    if actual_hours is not None and actual_hours >= 0:
+        task.actual_hours = actual_hours
+        
+        # Optionally mark as Done if user checks the box
+        if request.form.get('mark_done') == 'on':
+            old_status = task.status
+            task.status = 'Done'
+            
+            if old_status != 'Done':
+                project = task.project
+                notify(project.created_by,
+                       'Task Completed',
+                       f'Task "{task.title}" in project "{project.name}" has been marked as Done.',
+                       category='success',
+                       link=url_for('pm.project_detail', project_id=project.id))
+        
+        task.project.check_and_update_status()
+        db.session.commit()
+        flash(f'Logged {actual_hours} hours for "{task.title}".', 'success')
+    else:
+        flash('Invalid hours value.', 'danger')
+        
+    return redirect(request.referrer or url_for('employee.my_tasks'))
+
+
 # ===========================================================================
 # SHIFT SWAP REQUEST (NEW)
 # ===========================================================================

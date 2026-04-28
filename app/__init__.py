@@ -12,11 +12,12 @@ def create_app(config_class=Config):
     app.config.from_object(config_class)
 
     # Initialize extensions
-    from app.extensions import db, migrate, login_manager, csrf
+    from app.extensions import db, migrate, login_manager, csrf, mail
     db.init_app(app)
     migrate.init_app(app, db)
     login_manager.init_app(app)
     csrf.init_app(app)
+    mail.init_app(app)
 
     # User loader for Flask-Login
     from app.models import User
@@ -51,7 +52,7 @@ def create_app(config_class=Config):
         from flask import request as req
         from flask_login import current_user as cu
         if cu.is_authenticated and cu.must_change_password:
-            allowed = {'auth.change_password', 'auth.logout', 'static'}
+            allowed = {'auth.change_password', 'auth.logout', 'auth.forgot_password', 'auth.reset_password', 'static'}
             if req.endpoint and req.endpoint not in allowed:
                 return redirect(url_for('auth.change_password'))
 

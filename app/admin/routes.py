@@ -43,11 +43,6 @@ def dashboard():
     total_modules = Module.query.count()
     total_employees = Employee.query.count()
     total_projects = Project.query.count()
-    active_projects = Project.query.filter_by(status='In Progress').count()
-    completed_projects = Project.query.filter_by(status='Completed').count()
-    total_tasks = Task.query.count()
-    pending_tasks = Task.query.filter_by(status='Pending').count()
-    total_milestones = Milestone.query.count()
     total_notifications = Notification.query.count()
     total_departments = Department.query.count()
     total_designations = Designation.query.count()
@@ -65,11 +60,6 @@ def dashboard():
                            total_modules=total_modules,
                            total_employees=total_employees,
                            total_projects=total_projects,
-                           active_projects=active_projects,
-                           completed_projects=completed_projects,
-                           total_tasks=total_tasks,
-                           pending_tasks=pending_tasks,
-                           total_milestones=total_milestones,
                            total_notifications=total_notifications,
                            total_departments=total_departments,
                            total_designations=total_designations,
@@ -530,3 +520,62 @@ def edit_shift(shift_id):
 def audit_logs():
     logs = AuditLog.query.order_by(AuditLog.timestamp.desc()).limit(100).all()
     return render_template('admin/audit_logs.html', logs=logs)
+
+
+# ===========================================================================
+# PM OVERVIEW (Admin as PM Lead)
+# ===========================================================================
+@bp.route('/pm-overview')
+@admin_required
+def pm_overview():
+    """Admin PM overview — all projects grouped by assigned PM."""
+    from datetime import date as date_cls
+    all_projects = Project.query.order_by(Project.assigned_pm, Project.created_at.desc()).all()
+
+    # Group projects by PM
+    pm_groups = {}  # pm_user -> [projects]
+    unassigned = []
+    for p in all_projects:
+        if p.assigned_pm:
+            pm_user = User.query.get(p.assigned_pm)
+            if pm_user not in pm_groups:
+                pm_groups[pm_user] = []
+            pm_groups[pm_user].append(p)
+        else:
+            unassigned.append(p)
+
+    # Build stats per PM
+    pm_stats = []
+    for pm_user, projects in pm_groups.items():
+        total_tasks = sum(p.tasks.count() for p in projects)
+        pending = sum(p.tasks.filter_by(status='Pending').count() for p in projects)
+        in_progress = sum(p.tasks.filter_by(status='In Progress').count() for p in projects)
+        done = sum(p.tasks.filter_by(status='Done').count() for p in projects)
+        overdue = sum(p.tasks.filter(Task.due_date < db.func.current_date(), Task.status != 'Done').count() for p in projects)
+        team_count = len(set(
+            m.user_id for p in projects for m in p.members
+        ))
+        pm_stats.append({
+            'pm': pm_user,
+            'projects': projects,
+            'total_tasks': total_tasks,
+            'pending': pending,
+            'in_progress': in_progress,
+            'done': done,
+            'overdue': overdue,
+            'team_count': team_count,
+        })
+
+    # Summary stats
+    total = len(all_projects)
+    active = sum(1 for p in all_projects if p.status == 'In Progress')
+    completed = sum(1 for p in all_projects if p.status == 'Completed')
+    delayed = sum(1 for p in all_projects if p.is_delayed)
+
+    return render_template('admin/pm_overview.html',
+                           pm_stats=pm_stats,
+                           unassigned_projects=unassigned,
+                           total_projects=total,
+                           active_projects=active,
+                           completed_projects=completed,
+                           delayed_projects=delayed)

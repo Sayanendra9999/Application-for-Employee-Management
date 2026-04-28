@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}PM Overview — Enterprise Portal{% endblock %}
+{% block page_title %}PM Overview{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="{{ url_for('admin.dashboard') }}" class="btn btn-outline-primary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Back to Admin Dashboard
+    </a>
+</div>
+
+<!-- Summary Stat Cards -->
+<div class="row g-4 mb-4">
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card purple">
+            <div class="stat-icon"><i class="fas fa-folder-open"></i></div>
+            <div class="stat-value">{{ total_projects }}</div>
+            <div class="stat-label">Total Projects</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card green">
+            <div class="stat-icon"><i class="fas fa-bolt"></i></div>
+            <div class="stat-value">{{ active_projects }}</div>
+            <div class="stat-label">Active</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card teal">
+            <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
+            <div class="stat-value">{{ completed_projects }}</div>
+            <div class="stat-label">Completed</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card pink">
+            <div class="stat-icon"><i class="fas fa-exclamation-triangle"></i></div>
+            <div class="stat-value">{{ delayed_projects }}</div>
+            <div class="stat-label">Delayed</div>
+        </div>
+    </div>
+</div>
+
+<!-- Projects grouped by PM -->
+{% for group in pm_stats %}
+<div class="data-card mb-4">
+    <div class="card-header">
+        <h5><i class="fas fa-user-tie me-2"></i>{{ group.pm.full_name }}</h5>
+        <div class="d-flex gap-2 flex-wrap" style="font-size:0.78rem;">
+            <span class="badge bg-primary">{{ group.projects|length }} project{{ 's' if group.projects|length != 1 }}</span>
+            <span class="badge bg-secondary">{{ group.total_tasks }} tasks</span>
+            <span class="badge bg-warning text-dark">{{ group.pending }} pending</span>
+            <span class="badge bg-info text-dark">{{ group.in_progress }} in-progress</span>
+            <span class="badge bg-success">{{ group.done }} done</span>
+            {% if group.overdue > 0 %}
+            <span class="badge bg-danger">{{ group.overdue }} overdue</span>
+            {% endif %}
+            <span class="badge bg-dark">{{ group.team_count }} team members</span>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Project</th>
+                    <th>Status</th>
+                    <th>Progress</th>
+                    <th>Deadline</th>
+                    <th>Tasks</th>
+                    <th>Team</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in group.projects %}
+                <tr>
+                    <td>
+                        <a href="{{ url_for('pm.project_detail', project_id=p.id) }}" class="fw-semibold text-decoration-none">
+                            {{ p.name }}
+                        </a>
+                    </td>
+                    <td><span class="badge-status badge-{{ p.status | lower | replace(' ', '-') }}">{{ p.status }}</span></td>
+                    <td>
+                        <div class="d-flex align-items-center gap-2">
+                            {% set prog = 100 if p.status == 'Completed' and p.tasks.count() == 0 else p.progress %}
+                            <div class="progress" style="width:60px; height:6px;">
+                                <div class="progress-bar {% if prog == 100 %}bg-success{% elif prog > 50 %}bg-primary{% elif prog > 0 %}bg-warning{% else %}bg-secondary{% endif %}"
+                                     style="width:{{ prog }}%"></div>
+                            </div>
+                            <small>{{ prog }}%</small>
+                        </div>
+                    </td>
+                    <td>
+                        {% if p.deadline %}
+                            <span class="{% if p.is_delayed %}text-danger fw-bold{% endif %}">
+                                {{ p.deadline.strftime('%d %b %Y') }}
+                                {% if p.is_delayed %}<i class="fas fa-exclamation-circle ms-1"></i>{% endif %}
+                            </span>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td>
+                        <small>
+                            {{ p.tasks.filter_by(status='Done').count() }}/{{ p.tasks.count() }} done
+                        </small>
+                    </td>
+                    <td>{{ p.members.count() }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endfor %}
+
+{% if unassigned_projects %}
+<div class="data-card mb-4">
+    <div class="card-header">
+        <h5><i class="fas fa-question-circle me-2"></i>Unassigned Projects</h5>
+    </div>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Project</th>
+                    <th>Status</th>
+                    <th>Created By</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in unassigned_projects %}
+                <tr>
+                    <td>
+                        <a href="{{ url_for('pm.project_detail', project_id=p.id) }}" class="fw-semibold text-decoration-none">
+                            {{ p.name }}
+                        </a>
+                    </td>
+                    <td><span class="badge-status badge-{{ p.status | lower | replace(' ', '-') }}">{{ p.status }}</span></td>
+                    <td>{{ p.creator.full_name }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{% if not pm_stats and not unassigned_projects %}
+<div class="data-card">
+    <div class="p-5 text-center" style="color:var(--text-secondary);">
+        <i class="fas fa-inbox fa-3x mb-3"></i>
+        <p>No projects found. Create your first project from the PM module.</p>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

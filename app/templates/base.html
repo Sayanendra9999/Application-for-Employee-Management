@@ -176,5 +176,96 @@
     <!-- Custom JS -->
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
     {% block extra_js %}{% endblock %}
+
+    {% if current_user.is_authenticated %}
+    <!-- Auto Logout Warning Modal -->
+    <div class="modal fade" id="autoLogoutModal" tabindex="-1" aria-labelledby="autoLogoutModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius:12px; border:none; box-shadow:0 10px 25px rgba(0,0,0,0.1);">
+          <div class="modal-header bg-warning text-dark" style="border-bottom:none; border-radius:12px 12px 0 0; padding:1.5rem;">
+            <h5 class="modal-title fw-bold" id="autoLogoutModalLabel">
+                <i class="fas fa-exclamation-triangle me-2"></i>Inactivity Warning
+            </h5>
+          </div>
+          <div class="modal-body text-center" style="padding:2rem 1.5rem;">
+            <div style="font-size:3rem; color:#f59e0b; margin-bottom:1rem;">
+                <i class="fas fa-clock"></i>
+            </div>
+            <h5 class="fw-bold mb-3">You have been inactive.</h5>
+            <p style="color:#64748b; font-size:0.95rem;">For your security, you will be automatically logged out in <strong id="logoutTimerDisplay">30</strong> seconds.</p>
+          </div>
+          <div class="modal-footer" style="border-top:1px solid #f1f5f9; padding:1.25rem;">
+            <button type="button" class="btn btn-primary w-100" id="stayLoggedInBtn" style="padding:11px; font-weight:600; border-radius:10px;">
+                Stay Logged In
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+        (function() {
+            let warningTimeout;
+            let logoutInterval;
+            let timeRemaining = 30; // seconds
+            
+            const IDLE_TIMEOUT_MS = 270000; // 4 minutes 30 seconds
+            let autoLogoutModal;
+            
+            function showWarning() {
+                if (!autoLogoutModal) {
+                    autoLogoutModal = new bootstrap.Modal(document.getElementById('autoLogoutModal'));
+                }
+                autoLogoutModal.show();
+                timeRemaining = 30;
+                document.getElementById('logoutTimerDisplay').innerText = timeRemaining;
+                
+                logoutInterval = setInterval(() => {
+                    timeRemaining--;
+                    document.getElementById('logoutTimerDisplay').innerText = timeRemaining;
+                    if (timeRemaining <= 0) {
+                        clearInterval(logoutInterval);
+                        window.location.href = "{{ url_for('auth.logout') }}";
+                    }
+                }, 1000);
+            }
+            
+            function resetTimers() {
+                clearTimeout(warningTimeout);
+                clearInterval(logoutInterval);
+                if (autoLogoutModal) {
+                    autoLogoutModal.hide();
+                }
+                warningTimeout = setTimeout(showWarning, IDLE_TIMEOUT_MS);
+            }
+            
+            // Listen for user activity
+            const activityEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+            
+            // Throttle the resetTimers to avoid too many calls on mousemove
+            let throttleTimer;
+            function throttledReset() {
+                if (throttleTimer) return;
+                throttleTimer = setTimeout(() => {
+                    resetTimers();
+                    throttleTimer = null;
+                }, 1000); // Only reset at most once per second
+            }
+
+            activityEvents.forEach(event => {
+                document.addEventListener(event, throttledReset, true);
+            });
+            
+            // Stay logged in button click
+            document.getElementById('stayLoggedInBtn').addEventListener('click', () => {
+                fetch(window.location.href, { method: 'HEAD' }).catch(() => {});
+                resetTimers();
+            });
+            
+            // Initialize
+            resetTimers();
+        })();
+    </script>
+    {% endif %}
 </body>
 </html>

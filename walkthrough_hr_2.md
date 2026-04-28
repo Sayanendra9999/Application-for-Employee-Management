@@ -164,7 +164,7 @@ ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'txt', 'xlsx',
 |---|---|---|
 | `config.py` | **Modified** | Added UPLOAD_FOLDER, MAX_CONTENT_LENGTH, ALLOWED_EXTENSIONS |
 | `app/models.py` | **Modified** | Added department/designation relationships to JobPosting, renamed PerformanceReview.employee_rel → employee |
-| `app/hr/routes.py` | **Modified** | Added 19 new routes (was 15, now 34) |
+| `app/hr/routes.py` | **Modified** | Added 19 new routes (was 15, now 34). Updated attendance check-in route for employee search filtering. |
 | `app/hr/forms.py` | **Modified** | Added 7 new forms (was 6, now 13) |
 | `app/hr/services.py` | **Modified** | Added 4 service functions |
 | `app/templates/hr/dashboard.html` | **Modified** | Added 4 Batch 2 quick links |
@@ -182,9 +182,10 @@ ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'txt', 'xlsx',
 | `app/templates/hr/payroll_form.html` | **New** | Edit individual payroll with auto-calculated data |
 | `app/templates/hr/documents.html` | **New** | Document list with download/delete |
 | `app/templates/hr/document_upload.html` | **New** | Upload form |
+| `app/templates/hr/attendance_checkin.html` | **Modified** | Added employee search filter and clear button |
 | `seed_data.py` | **Modified** | Added performance reviews, job postings, candidates, interviews |
 
-**Total new files: 12** · **Modified files: 7**
+**Total new files: 12** · **Modified files: 8**
 
 ---
 

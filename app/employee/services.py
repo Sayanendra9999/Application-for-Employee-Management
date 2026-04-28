@@ -485,6 +485,8 @@ def update_task_status(user_id, task_id, new_status, ip=''):
             link=f'/pm/projects/{project.id}'
         )
         
+        task.project.check_and_update_status()
+        
         logger.info(f'Task #{task.id} status updated to {new_status} by emp#{user_id}')
         return True, f'Task status updated to {new_status}.'
     except Exception as e:

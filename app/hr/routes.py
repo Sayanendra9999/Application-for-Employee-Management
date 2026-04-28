@@ -250,6 +250,39 @@ def api_profile_status(emp_id):
 # ===========================================================================
 # ATTENDANCE MANAGEMENT
 # ===========================================================================
+@bp.route('/api/attendance')
+@module_required('hr')
+def api_attendance():
+    """API for real-time attendance search by employee ID/name."""
+    emp_query = request.args.get('employee_id', '').strip()
+    
+    query = Employee.query.join(User)
+    if emp_query:
+        query = query.filter(
+            db.or_(
+                Employee.emp_code.ilike(f'%{emp_query}%'),
+                User.full_name.ilike(f'%{emp_query}%')
+            )
+        )
+    
+    employees = query.order_by(Employee.emp_code).all()
+    today_records = {a.employee_id: a for a in Attendance.query.filter_by(date=date.today()).all()}
+    
+    results = []
+    for emp in employees:
+        rec = today_records.get(emp.id)
+        results.append({
+            'emp_code': emp.emp_code,
+            'full_name': emp.user.full_name,
+            'check_in': rec.check_in.strftime('%H:%M:%S') if rec and rec.check_in else '—',
+            'check_out': rec.check_out.strftime('%H:%M:%S') if rec and rec.check_out else '—',
+            'working_hours': f'{rec.working_hours:.1f}h' if rec and rec.working_hours else '—',
+            'status': rec.status if rec else 'Not Recorded'
+        })
+        
+    return jsonify(results)
+
+
 @bp.route('/attendance')
 @module_required('hr')
 def attendance():
@@ -943,3 +976,4 @@ def run_auto_absent():
     else:
         flash('No employees to mark absent.', 'info')
     return redirect(url_for('hr.attendance'))
+   

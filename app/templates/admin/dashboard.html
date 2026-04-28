@@ -123,30 +123,18 @@
         </div>
     </div>
 
-    <!-- PM Overview — NEW -->
+    <!-- PM Overview -->
     <div class="col-lg-4">
         <div class="data-card">
             <div class="card-header">
-                <h5><i class="fas fa-diagram-project me-2"></i>PM Overview</h5>
+                <h5><i class="fas fa-diagram-project me-2"></i>Project Management</h5>
             </div>
             <div class="p-4">
                 <div class="d-grid gap-2">
-                    <div class="btn btn-outline-primary text-start" style="cursor:default;">
-                        <i class="fas fa-bolt me-2"></i>Active Projects
-                        <span class="badge bg-success float-end">{{ active_projects }}</span>
-                    </div>
-                    <div class="btn btn-outline-primary text-start" style="cursor:default;">
-                        <i class="fas fa-check-circle me-2"></i>Completed Projects
-                        <span class="badge bg-primary float-end">{{ completed_projects }}</span>
-                    </div>
-                    <div class="btn btn-outline-primary text-start" style="cursor:default;">
-                        <i class="fas fa-clock me-2"></i>Pending Tasks
-                        <span class="badge bg-warning text-dark float-end">{{ pending_tasks }}</span>
-                    </div>
-                    <div class="btn btn-outline-primary text-start" style="cursor:default;">
-                        <i class="fas fa-flag-checkered me-2"></i>Milestones
-                        <span class="badge bg-primary float-end">{{ total_milestones }}</span>
-                    </div>
+                    <a href="{{ url_for('admin.pm_overview') }}" class="btn btn-outline-primary text-start">
+                        <i class="fas fa-diagram-project me-2"></i>PM Overview
+                        <span class="badge bg-primary float-end">{{ total_projects }}</span>
+                    </a>
                     <a href="{{ url_for('admin.audit_logs') }}" class="btn btn-outline-secondary text-start">
                         <i class="fas fa-shield-halved me-2"></i>Audit Logs
                     </a>

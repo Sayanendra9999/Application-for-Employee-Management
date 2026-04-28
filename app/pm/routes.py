@@ -7,8 +7,33 @@ from app.pm import bp
 from app.decorators import module_required
 from app.extensions import db
 from app.models import (Project, ProjectMember, Task, Milestone,
-                        Notification, User, AuditLog)
+                        Notification, User, AuditLog, Module)
 from app.pm.forms import ProjectForm, TaskForm, MilestoneForm
+
+
+def _get_user_projects(user):
+    """Return projects visible to the user based on role hierarchy."""
+    if user.is_admin:
+        return Project.query.order_by(Project.created_at.desc()).all()
+    # Projects assigned to this user as PM
+    pm_projects = Project.query.filter_by(assigned_pm=user.id).all()
+    if pm_projects:
+        return pm_projects
+    # Projects where user is a member
+    member_project_ids = db.session.query(ProjectMember.project_id).filter_by(user_id=user.id).subquery()
+    return Project.query.filter(Project.id.in_(member_project_ids)).order_by(Project.created_at.desc()).all()
+
+
+def _is_pm_or_admin(user, project):
+    """Check if user is the assigned PM or an admin."""
+    return user.is_admin or project.assigned_pm == user.id
+
+
+def _can_view_project(user, project):
+    """Check if user can view this project."""
+    if user.is_admin or project.assigned_pm == user.id:
+        return True
+    return ProjectMember.query.filter_by(project_id=project.id, user_id=user.id).first() is not None
 
 
 # ---------------------------------------------------------------------------
@@ -37,22 +62,30 @@ def log_audit(user_id, action, entity_type, entity_id=None, details=''):
 @bp.route('/')
 @module_required('pm')
 def dashboard():
-    total_projects = Project.query.count()
-    active_projects = Project.query.filter_by(status='In Progress').count()
-    completed_projects = Project.query.filter_by(status='Completed').count()
-    on_hold_projects = Project.query.filter_by(status='On Hold').count()
+    visible_projects = _get_user_projects(current_user)
+    visible_ids = [p.id for p in visible_projects]
 
-    total_tasks = Task.query.count()
-    pending_tasks = Task.query.filter_by(status='Pending').count()
-    tasks_done = Task.query.filter_by(status='Done').count()
-    tasks_in_progress = Task.query.filter_by(status='In Progress').count()
-    overdue_tasks = Task.query.filter(Task.due_date < db.func.current_date(),
-                                       Task.status != 'Done').count()
+    total_projects = len(visible_projects)
+    active_projects = sum(1 for p in visible_projects if p.status == 'In Progress')
+    completed_projects = sum(1 for p in visible_projects if p.status == 'Completed')
+    on_hold_projects = sum(1 for p in visible_projects if p.status == 'On Hold')
 
-    total_milestones = Milestone.query.count()
-    completed_milestones = Milestone.query.filter_by(status='Completed').count()
+    task_q = Task.query.filter(Task.project_id.in_(visible_ids)) if visible_ids else Task.query.filter(False)
+    total_tasks = task_q.count()
+    pending_tasks = task_q.filter(Task.status == 'Pending').count()
+    tasks_done = task_q.filter(Task.status == 'Done').count()
+    tasks_in_progress = task_q.filter(Task.status == 'In Progress').count()
+    overdue_tasks = task_q.filter(Task.due_date < db.func.current_date(), Task.status != 'Done').count()
 
-    recent_projects = Project.query.order_by(Project.created_at.desc()).limit(5).all()
+    ms_q = Milestone.query.filter(Milestone.project_id.in_(visible_ids)) if visible_ids else Milestone.query.filter(False)
+    total_milestones = ms_q.count()
+    completed_milestones = ms_q.filter(Milestone.status == 'Completed').count()
+
+    recent_projects = visible_projects[:5]
+
+    # Determine user's PM role context
+    is_project_manager = any(p.assigned_pm == current_user.id for p in visible_projects)
+    is_team_member = not current_user.is_admin and not is_project_manager
 
     # Unread notifications for current user
     unread_notifications = Notification.query.filter_by(
@@ -72,7 +105,9 @@ def dashboard():
                            total_milestones=total_milestones,
                            completed_milestones=completed_milestones,
                            recent_projects=recent_projects,
-                           unread_notifications=unread_notifications)
+                           unread_notifications=unread_notifications,
+                           is_project_manager=is_project_manager,
+                           is_team_member=is_team_member)
 
 
 # ===========================================================================
@@ -116,20 +151,29 @@ def mark_all_read():
 @module_required('pm')
 def projects():
     status_filter = request.args.get('status', '')
-    query = Project.query
+    visible = _get_user_projects(current_user)
     if status_filter:
-        query = query.filter_by(status=status_filter)
-    all_projects = query.order_by(Project.created_at.desc()).all()
-    return render_template('pm/projects.html', projects=all_projects,
-                           current_status=status_filter)
+        visible = [p for p in visible if p.status == status_filter]
+    can_create = current_user.is_admin
+    return render_template('pm/projects.html', projects=visible,
+                           current_status=status_filter,
+                           can_create=can_create)
 
 
 @bp.route('/projects/add', methods=['GET', 'POST'])
 @module_required('pm')
 def add_project():
+    if not current_user.is_admin:
+        flash('Only Admin can create projects.', 'danger')
+        return redirect(url_for('pm.projects'))
     form = ProjectForm()
+    # Populate PM dropdown with users who have pm module access
+    pm_module = Module.query.filter_by(slug='pm').first()
+    pm_users = pm_module.users.all() if pm_module else []
+    form.assigned_pm.choices = [(0, '-- Select PM --')] + [
+        (u.id, u.full_name) for u in pm_users if not u.is_admin
+    ]
     if form.validate_on_submit():
-        # Duplicate check
         existing = Project.query.filter(
             db.func.lower(Project.name) == form.name.data.strip().lower()
         ).first()
@@ -137,18 +181,28 @@ def add_project():
             flash(f'Project "{form.name.data}" already exists.', 'danger')
             return render_template('pm/project_form.html', form=form, title='New Project')
 
+        assigned = form.assigned_pm.data if form.assigned_pm.data != 0 else None
         project = Project(
             name=form.name.data.strip(),
             description=form.description.data or '',
             start_date=form.start_date.data,
             end_date=form.end_date.data,
             deadline=form.deadline.data,
+            estimated_hours=form.estimated_hours.data or 0.0,
             status=form.status.data,
+            assigned_pm=assigned,
             created_by=current_user.id
         )
         db.session.add(project)
-        log_audit(current_user.id, 'CREATE', 'Project', None,
+        db.session.flush()  # ensure project.id is available
+        log_audit(current_user.id, 'CREATE', 'Project', project.id,
                   f'Created project "{project.name}"')
+        # Notify assigned PM
+        if assigned:
+            notify(assigned, 'Project Assigned',
+                   f'You have been assigned as Project Manager for "{project.name}".',
+                   category='info',
+                   link=url_for('pm.project_detail', project_id=project.id))
         db.session.commit()
         flash(f'Project "{project.name}" created.', 'success')
         return redirect(url_for('pm.project_detail', project_id=project.id))
@@ -159,25 +213,38 @@ def add_project():
 @module_required('pm')
 def project_detail(project_id):
     project = Project.query.get_or_404(project_id)
+    if not _can_view_project(current_user, project):
+        abort(403)
     members = ProjectMember.query.filter_by(project_id=project.id).all()
     tasks = Task.query.filter_by(project_id=project.id).order_by(Task.created_at.desc()).all()
     milestones = Milestone.query.filter_by(project_id=project.id)\
         .order_by(Milestone.deadline.asc().nullslast()).all()
+    # For add-member dropdown: show all active users (PM/admin will use this)
     all_users = User.query.filter_by(is_active_user=True).order_by(User.full_name).all()
-
-    # Progress calculation
     progress = project.progress
+    can_manage = _is_pm_or_admin(current_user, project)
 
     return render_template('pm/project_detail.html', project=project,
                            members=members, tasks=tasks, milestones=milestones,
-                           all_users=all_users, progress=progress)
+                           all_users=all_users, progress=progress,
+                           can_manage=can_manage)
 
 
 @bp.route('/projects/<int:project_id>/edit', methods=['GET', 'POST'])
 @module_required('pm')
 def edit_project(project_id):
     project = Project.query.get_or_404(project_id)
+    if not _is_pm_or_admin(current_user, project):
+        abort(403)
     form = ProjectForm(obj=project)
+    # Populate PM dropdown
+    pm_module = Module.query.filter_by(slug='pm').first()
+    pm_users = pm_module.users.all() if pm_module else []
+    form.assigned_pm.choices = [(0, '-- Select PM --')] + [
+        (u.id, u.full_name) for u in pm_users if not u.is_admin
+    ]
+    if request.method == 'GET':
+        form.assigned_pm.data = project.assigned_pm or 0
     if form.validate_on_submit():
         # Duplicate check (exclude self)
         existing = Project.query.filter(
@@ -195,7 +262,10 @@ def edit_project(project_id):
         project.start_date = form.start_date.data
         project.end_date = form.end_date.data
         project.deadline = form.deadline.data
+        project.estimated_hours = form.estimated_hours.data or 0.0
         project.status = form.status.data
+        if current_user.is_admin:
+            project.assigned_pm = form.assigned_pm.data if form.assigned_pm.data != 0 else None
 
         log_audit(current_user.id, 'UPDATE', 'Project', project.id,
                   f'Updated project "{project.name}"')
@@ -219,6 +289,8 @@ def edit_project(project_id):
 @module_required('pm')
 def delete_project(project_id):
     project = Project.query.get_or_404(project_id)
+    if not current_user.is_admin:
+        abort(403)
     project_name = project.name
     log_audit(current_user.id, 'DELETE', 'Project', project.id,
               f'Deleted project "{project_name}"')
@@ -235,6 +307,9 @@ def delete_project(project_id):
 @module_required('pm')
 def add_member(project_id):
     project = Project.query.get_or_404(project_id)
+    if not _is_pm_or_admin(current_user, project):
+        flash('Only the assigned PM or Admin can manage team members.', 'danger')
+        return redirect(url_for('pm.project_detail', project_id=project.id))
     user_id = request.form.get('user_id', type=int)
     role = request.form.get('role', 'Developer')
     if user_id:
@@ -265,6 +340,10 @@ def add_member(project_id):
 @module_required('pm')
 def remove_member(project_id, member_id):
     member = ProjectMember.query.get_or_404(member_id)
+    project = Project.query.get_or_404(project_id)
+    if not _is_pm_or_admin(current_user, project):
+        flash('Only the assigned PM or Admin can manage team members.', 'danger')
+        return redirect(url_for('pm.project_detail', project_id=project_id))
     user_name = member.user.full_name
     notify(member.user_id,
            'Removed from Project',
@@ -285,10 +364,17 @@ def remove_member(project_id, member_id):
 @module_required('pm')
 def add_task(project_id):
     project = Project.query.get_or_404(project_id)
+    if not _is_pm_or_admin(current_user, project):
+        abort(403)
     form = TaskForm()
-    users = User.query.filter_by(is_active_user=True).order_by(User.full_name).all()
+    # Only show project members in the assignment dropdown
+    members = ProjectMember.query.filter_by(project_id=project.id).all()
+    member_users = [User.query.get(m.user_id) for m in members]
+    # Also include the assigned PM
+    if project.pm_owner and project.pm_owner not in member_users:
+        member_users.insert(0, project.pm_owner)
     form.assigned_to.choices = [(0, '-- Unassigned --')] + \
-        [(u.id, u.full_name) for u in users]
+        [(u.id, u.full_name) for u in member_users if u]
 
     if form.validate_on_submit():
         assigned = form.assigned_to.data if form.assigned_to.data != 0 else None
@@ -299,6 +385,7 @@ def add_task(project_id):
             assigned_to=assigned,
             priority=form.priority.data,
             status=form.status.data,
+            estimated_hours=form.estimated_hours.data or 0.0,
             due_date=form.due_date.data
         )
         db.session.add(task)
@@ -314,6 +401,7 @@ def add_task(project_id):
 
         log_audit(current_user.id, 'CREATE', 'Task', None,
                   f'Created task "{task.title}" in project "{project.name}"')
+        project.check_and_update_status()
         db.session.commit()
         flash(f'Task "{task.title}" created.', 'success')
         return redirect(url_for('pm.project_detail', project_id=project.id))
@@ -325,10 +413,17 @@ def add_task(project_id):
 @module_required('pm')
 def edit_task(task_id):
     task = Task.query.get_or_404(task_id)
+    project = task.project
+    if not _is_pm_or_admin(current_user, project):
+        abort(403)
     form = TaskForm(obj=task)
-    users = User.query.filter_by(is_active_user=True).order_by(User.full_name).all()
+    # Only show project members in the assignment dropdown
+    members = ProjectMember.query.filter_by(project_id=project.id).all()
+    member_users = [User.query.get(m.user_id) for m in members]
+    if project.pm_owner and project.pm_owner not in member_users:
+        member_users.insert(0, project.pm_owner)
     form.assigned_to.choices = [(0, '-- Unassigned --')] + \
-        [(u.id, u.full_name) for u in users]
+        [(u.id, u.full_name) for u in member_users if u]
 
     if form.validate_on_submit():
         old_status = task.status
@@ -340,6 +435,7 @@ def edit_task(task_id):
         task.assigned_to = new_assigned
         task.priority = form.priority.data
         task.status = form.status.data
+        task.estimated_hours = form.estimated_hours.data or 0.0
         task.due_date = form.due_date.data
 
         # Notify: task reassigned to new person
@@ -377,6 +473,7 @@ def edit_task(task_id):
 
         log_audit(current_user.id, 'UPDATE', 'Task', task.id,
                   f'Updated task "{task.title}"')
+        task.project.check_and_update_status()
         db.session.commit()
         flash(f'Task "{task.title}" updated.', 'success')
         return redirect(url_for('pm.project_detail', project_id=task.project_id))
@@ -393,8 +490,47 @@ def delete_task(task_id):
               f'Deleted task "{task.title}"')
     db.session.delete(task)
     db.session.commit()
+    
+    project = Project.query.get(project_id)
+    if project:
+        project.check_and_update_status()
+        db.session.commit()
+        
     flash('Task deleted.', 'info')
     return redirect(url_for('pm.project_detail', project_id=project_id))
+
+
+@bp.route('/tasks/<int:task_id>/log-hours', methods=['POST'])
+@module_required('pm')
+def log_task_hours(task_id):
+    task = Task.query.get_or_404(task_id)
+    if task.assigned_to != current_user.id:
+        abort(403)
+        
+    actual_hours = request.form.get('actual_hours', type=float)
+    if actual_hours is not None and actual_hours >= 0:
+        task.actual_hours = actual_hours
+        
+        # Optionally mark as Done if user checks the box
+        if request.form.get('mark_done') == 'on':
+            old_status = task.status
+            task.status = 'Done'
+            
+            if old_status != 'Done':
+                project = task.project
+                notify(project.created_by,
+                       'Task Completed',
+                       f'Task "{task.title}" in project "{project.name}" has been marked as Done.',
+                       category='success',
+                       link=url_for('pm.project_detail', project_id=project.id))
+        
+        task.project.check_and_update_status()
+        db.session.commit()
+        flash(f'Logged {actual_hours} hours for "{task.title}".', 'success')
+    else:
+        flash('Invalid hours value.', 'danger')
+        
+    return redirect(url_for('pm.project_detail', project_id=task.project_id))
 
 
 # ===========================================================================

@@ -87,7 +87,9 @@ CREATE TABLE IF NOT EXISTS projects (
     start_date DATE,
     end_date DATE,
     deadline DATE,
+    estimated_hours REAL DEFAULT 0.0,
     status VARCHAR(30) DEFAULT 'Not Started',
+    assigned_pm INTEGER REFERENCES users(id),
     created_by INTEGER NOT NULL REFERENCES users(id),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -110,6 +112,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     assigned_to INTEGER REFERENCES users(id),
     priority VARCHAR(20) DEFAULT 'Medium',
     status VARCHAR(20) DEFAULT 'Pending',
+    estimated_hours REAL DEFAULT 0.0,
+    actual_hours REAL DEFAULT 0.0,
     due_date DATE,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP

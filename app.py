@@ -1,5 +1,8 @@
 """Entry point — run the Enterprise Portal."""
 
+from dotenv import load_dotenv
+load_dotenv()  # Load .env file before anything else
+
 from app import create_app
 from app.extensions import db
 

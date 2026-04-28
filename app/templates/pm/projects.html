@@ -8,9 +8,11 @@
         <h4 style="font-weight:700;">All Projects</h4>
         <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">{{ projects | length }} projects</p>
     </div>
+    {% if can_create %}
     <a href="{{ url_for('pm.add_project') }}" class="btn btn-primary" id="btn-add-project">
         <i class="fas fa-plus me-2"></i>New Project
     </a>
+    {% endif %}
 </div>
 
 <!-- Status Filter -->
@@ -30,6 +32,8 @@
                     <th>Project</th>
                     <th>Status</th>
                     <th>Progress</th>
+                    <th>Est. Hours</th>
+                    <th>Actual Hours</th>
                     <th>Start</th>
                     <th>Deadline</th>
                     <th>Tasks</th>
@@ -55,6 +59,11 @@
                             </div>
                             <small>{{ calculated_progress }}%</small>
                         </div>
+                    </td>
+                    <td>{{ p.estimated_hours|default(0.0) }} hrs</td>
+                    {% set total_actual = p.tasks | map(attribute='actual_hours') | sum %}
+                    <td class="{% if total_actual > p.estimated_hours and p.estimated_hours > 0 %}text-danger fw-bold{% endif %}">
+                        {{ total_actual }} hrs
                     </td>
                     <td>{{ p.start_date.strftime('%d %b') if p.start_date else '—' }}</td>
                     <td>
@@ -83,7 +92,7 @@
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="8" class="text-center py-4" style="color:var(--text-secondary);">No projects found</td></tr>
+                <tr><td colspan="9" class="text-center py-4" style="color:var(--text-secondary);">No projects found</td></tr>
                 {% endfor %}
             </tbody>
         </table>
