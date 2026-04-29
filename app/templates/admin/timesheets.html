@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Timesheet Management — Enterprise Portal{% endblock %}
+{% block page_title %}Timesheet Management{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+    <div>
+        <h4 style="font-weight:700;">Global Timesheet Report</h4>
+        <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">
+            {{ records|length }} records · {{ total_hours }}h total · {{ approved_hours }}h approved
+        </p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('admin.export_timesheets', format='csv', status=selected_status, date_from=date_from, date_to=date_to) }}" class="btn btn-outline-success btn-sm">
+            <i class="fas fa-file-csv me-1"></i>Export CSV
+        </a>
+        <a href="{{ url_for('admin.export_timesheets', format='xlsx', status=selected_status, date_from=date_from, date_to=date_to) }}" class="btn btn-outline-success btn-sm">
+            <i class="fas fa-file-excel me-1"></i>Export Excel
+        </a>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="data-card mb-4">
+    <div class="p-3">
+        <form method="GET" class="d-flex gap-2 flex-wrap align-items-center">
+            <select name="status" class="form-select form-select-sm" style="max-width:140px;">
+                <option value="">All Status</option>
+                <option value="Pending" {% if selected_status == 'Pending' %}selected{% endif %}>Pending</option>
+                <option value="Approved" {% if selected_status == 'Approved' %}selected{% endif %}>Approved</option>
+                <option value="Rejected" {% if selected_status == 'Rejected' %}selected{% endif %}>Rejected</option>
+            </select>
+            <select name="project" class="form-select form-select-sm" style="max-width:200px;">
+                <option value="">All Projects</option>
+                {% for p in projects %}
+                <option value="{{ p.id }}" {% if selected_project == p.id %}selected{% endif %}>{{ p.name }}</option>
+                {% endfor %}
+            </select>
+            <select name="employee" class="form-select form-select-sm" style="max-width:200px;">
+                <option value="">All Employees</option>
+                {% for e in employees %}
+                <option value="{{ e.id }}" {% if selected_employee == e.id %}selected{% endif %}>{{ e.emp_code }} — {{ e.user.full_name }}</option>
+                {% endfor %}
+            </select>
+            <input type="date" name="date_from" value="{{ date_from }}" class="form-control form-control-sm" style="max-width:150px;">
+            <input type="date" name="date_to" value="{{ date_to }}" class="form-control form-control-sm" style="max-width:150px;">
+            <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-filter me-1"></i>Filter</button>
+            <a href="{{ url_for('admin.timesheets') }}" class="btn btn-outline-secondary btn-sm">Clear</a>
+        </form>
+    </div>
+</div>
+
+<div class="data-card">
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Employee</th>
+                    <th>Date</th>
+                    <th>Project</th>
+                    <th>Task</th>
+                    <th>Hours</th>
+                    <th>Status</th>
+                    <th>Approved By</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in records %}
+                <tr>
+                    <td><code>#{{ r.id }}</code></td>
+                    <td class="fw-semibold">{{ r.employee_name }}<br><small class="text-muted">{{ r.employee.emp_code }}</small></td>
+                    <td>{{ r.date.strftime('%d %b %Y') }}</td>
+                    <td>{{ r.project_name }}</td>
+                    <td>{{ r.task_title }}</td>
+                    <td><strong>{{ r.hours_worked }}h</strong></td>
+                    <td><span class="badge-status badge-{{ r.status|lower }}">{{ r.status }}</span></td>
+                    <td>{{ r.approver.full_name if r.approver else '—' }}</td>
+                    <td>
+                        <div class="d-flex gap-1">
+                            {% if r.status != 'Approved' %}
+                            <form method="POST" action="{{ url_for('admin.force_approve_timesheet', ts_id=r.id) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn-action primary" title="Force Approve">
+                                    <i class="fas fa-check"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                            {% if r.status != 'Rejected' %}
+                            <button type="button" class="btn-action danger" title="Force Reject"
+                                    data-bs-toggle="modal" data-bs-target="#rejectModalAdmin-{{ r.id }}">
+                                <i class="fas fa-times"></i>
+                            </button>
+
+                            <div class="modal fade" id="rejectModalAdmin-{{ r.id }}" tabindex="-1" aria-hidden="true">
+                              <div class="modal-dialog modal-dialog-centered">
+                                <div class="modal-content">
+                                  <div class="modal-header border-0 pb-0">
+                                    <h5 class="modal-title fw-bold">Force Reject Timesheet</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                  </div>
+                                  <form method="POST" action="{{ url_for('admin.force_reject_timesheet', ts_id=r.id) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <div class="modal-body">
+                                      <p class="text-muted" style="font-size:0.9rem;">
+                                        {{ r.employee_name }} — {{ r.hours_worked }}h on {{ r.date.strftime('%d %b %Y') }}
+                                        {% if r.status == 'Approved' %}<br><span class="text-danger"><i class="fas fa-exclamation-triangle me-1"></i>This will reverse {{ r.hours_worked }}h from task hours.</span>{% endif %}
+                                      </p>
+                                      <label class="form-label">Rejection Reason</label>
+                                      <textarea name="rejection_reason" class="form-control" rows="3" placeholder="Admin override reason...">Admin override</textarea>
+                                    </div>
+                                    <div class="modal-footer border-0 pt-0">
+                                      <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                                      <button type="submit" class="btn btn-danger">Force Reject</button>
+                                    </div>
+                                  </form>
+                                </div>
+                              </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="9" class="text-center py-4" style="color:var(--text-secondary);">No timesheet records found</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

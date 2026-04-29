@@ -1,0 +1,217 @@
+# PM Module Role Hierarchy Restructuring
+
+## Problem Statement
+
+The current PM module is **flat** — anyone with the `pm` module assigned can see **all** projects, create projects, assign anyone, and manage everything. There is no concept of:
+
+- **PM Lead** (head of the PM department — assigns projects to individual Project Managers)
+- **Project Manager** (owns specific projects — assigns Team Leads and Team Members within their projects)
+- **Team Lead** / **Team Member** (work on assigned tasks within their projects)
+
+Additionally, the **Admin dashboard** currently shows PM stats inline (active projects, pending tasks, milestones) as static badges — there's no clickable "PM Overview" page where Admin can drill into all projects.
+
+---
+
+## Refined Requirements (What You're Asking For)
+
+Based on my analysis of your codebase and your request, here is what I understand you want:
+
+### 1. Role Hierarchy within PM Module
+
+```mermaid
+graph TD
+    A["Admin (God view — sees everything)"] --> B["PM Lead (1 person — assigns projects to PMs)"]
+    B --> C1["Project Manager 1"]
+    B --> C2["Project Manager 2"]
+    B --> C3["Project Manager N"]
+    C1 --> D1["Team Lead A"]
+    C1 --> D2["Team Member B"]
+    C1 --> D3["Team Member C"]
+    C2 --> D4["Team Lead D"]
+    C2 --> D5["Team Member E"]
+```
+
+- **Admin**: Read-only oversight of all PM data. Does NOT create projects. Gets a dedicated "PM Overview" page (not inline stats on the dashboard).
+- **PM Lead**: Creates projects and assigns them to individual **Project Managers**. Can see all projects aggregated.
+- **Project Manager**: Owns their assigned projects. Can assign **Team Leads** and **Team Members**. Sees only their own projects on their dashboard.
+- **Team Lead / Team Member**: Sees only the projects they are part of. Team Lead may have limited management abilities (e.g., update task status, assign sub-tasks).
+
+### 2. Individual Project Manager Dashboard
+
+Each Project Manager should see:
+- Only **their own projects** (not all projects in the system)
+- Cumulative task distribution across their projects (e.g., X pending, Y in-progress, Z done)
+- Team workload view — how many tasks are assigned to each team member across their projects
+
+### 3. Admin PM Overview (Refactored)
+
+> [!IMPORTANT]
+> **Your current admin dashboard** has a "PM Overview" card (lines 126–156 in `admin/dashboard.html`) showing static badges for active projects, completed projects, pending tasks, and milestones. You want to:
+> 1. **Remove** this inline PM Overview from the admin dashboard
+> 2. **Replace it with a link** to a dedicated `/admin/pm-overview` page
+> 3. That page shows **all projects** with progress, task distribution, team allocation — a full read-only overview
+
+---
+
+## Open Questions
+
+> [!IMPORTANT]
+> ### Q1: Should Admin be above PM Lead?
+> **Currently:** Admin has `is_admin=True` and bypasses all module checks. They can already access the PM module and see everything.
+>
+> **My recommendation:** Yes, Admin should remain **above** PM Lead. Admin has god-mode access to everything but does NOT actively manage projects (read-only oversight). PM Lead is the operational head of project management. This keeps separation of concerns clean.
+>
+> **Do you agree**, or do you want Admin to also be able to create/assign projects?
+
+> [!IMPORTANT]
+> ### Q2: How do we designate someone as "PM Lead" vs "Project Manager"?
+> Currently, all PM module users are equal. We need a way to distinguish roles. Options:
+>
+> **Option A:** Add a `pm_role` field to the `User` model: `pm_lead`, `project_manager`, `team_lead`, `team_member`
+>
+> **Option B:** Use the existing `ProjectMember.role` field — PM Lead is anyone who creates a project and assigns a PM; Project Managers are added to projects with role = "Project Manager"
+>
+> **Option C:** Create a separate `pm_role` column on the `user_modules` table so roles are module-specific
+>
+> **Which approach do you prefer?** I recommend **Option A** for simplicity.
+
+> [!IMPORTANT]
+> ### Q3: Can there be multiple PM Leads, or strictly one?
+> You said "have a PM Lead" (singular). Should there be:
+> - **Exactly one** PM Lead in the system (like a CTO for projects)?
+> - **Multiple** PM Leads (e.g., one per department)?
+
+> [!WARNING]
+> ### Q4: Should Project Managers only see their own projects?
+> Right now, the PM dashboard shows ALL projects. If we scope it per-PM, then:
+> - PM Lead sees **all projects** (aggregate view)
+> - Project Manager sees **only projects assigned to them**
+> - Team members see **only projects they're part of**
+>
+> **Is this the scoping you want?**
+
+> [!IMPORTANT]
+> ### Q5: What does "assign a project to a Project Manager" mean?
+> Currently, `Project.created_by` stores who created the project, and `ProjectMember` stores team members with roles. Should we:
+>
+> **Option A:** Add a new field `Project.assigned_pm` (FK to `users.id`) — the PM responsible for the project
+>
+> **Option B:** Use `ProjectMember` with `role = 'Project Manager'` — the PM is just a special member
+>
+> **I recommend Option A** — a project has exactly one assigned PM, plus team members.
+
+> [!IMPORTANT]
+> ### Q6: What should the PM Lead's dashboard show?
+> Options:
+> - **All projects** grouped by Project Manager (who owns what)
+> - **Cumulative stats** across all PMs (total tasks, bottlenecks, delayed projects)
+> - **PM performance metrics** (how many tasks are each PM's team completing)
+>
+> **What level of detail do you want?**
+
+> [!NOTE]
+> ### Q7: Team Lead vs Team Member permissions
+> Should Team Leads have any extra permissions compared to Team Members? For example:
+> - Can Team Leads assign tasks to team members?
+> - Can Team Leads update task status for others?
+> - Or are they just a label?
+
+> [!NOTE]
+> ### Q8: What about existing data?
+> The seed data has `pm_lead` (Rahul Verma) as a user with `pm` module access. After this change:
+> - Should `pm_lead` become the PM Lead role?
+> - Should `john_doe` (who has `pm` module) become a Project Manager or Team Member?
+> - Do we need to update seed data to reflect the new hierarchy?
+
+---
+
+## Proposed Changes (Pending Your Answers)
+
+Once you answer the questions above, I'll finalize the plan. Here's the preliminary architecture:
+
+---
+
+### Database / Models
+
+#### [MODIFY] [models.py](file:///c:/JGpc/app_at_present/app/models.py)
+
+1. **Add `pm_role` to User model** (or alternative per Q2):
+   ```python
+   pm_role = db.Column(db.String(30), nullable=True)  # pm_lead, project_manager, team_lead, team_member
+   ```
+
+2. **Add `assigned_pm` to Project model** (per Q5):
+   ```python
+   assigned_pm = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+   ```
+
+3. Update relationships accordingly
+
+#### [MODIFY] [schema.sql](file:///c:/JGpc/app_at_present/schema.sql)
+- Mirror model changes in SQL reference
+
+---
+
+### Admin Module
+
+#### [MODIFY] [admin/routes.py](file:///c:/JGpc/app_at_present/app/admin/routes.py)
+- Add new route `GET /admin/pm-overview` — read-only page showing all projects, grouped by PM, with stats
+- Remove PM stat variables from the dashboard route (or keep them minimal)
+
+#### [MODIFY] [admin/dashboard.html](file:///c:/JGpc/app_at_present/app/templates/admin/dashboard.html)
+- Replace inline PM Overview card with a single link/button to `/admin/pm-overview`
+
+#### [NEW] [admin/pm_overview.html](file:///c:/JGpc/app_at_present/app/templates/admin/pm_overview.html)
+- Full-page PM overview for admin: all projects table, progress bars, task breakdowns, team allocation
+
+---
+
+### PM Module
+
+#### [MODIFY] [pm/routes.py](file:///c:/JGpc/app_at_present/app/pm/routes.py)
+- **Dashboard**: Scope projects based on `pm_role`:
+  - PM Lead → all projects
+  - Project Manager → only their projects (`assigned_pm == current_user.id`)
+  - Team Lead/Member → only projects they're members of
+- **Project creation**: Only PM Lead can create projects and assign a PM
+- **Project assignment**: New form field to select which Project Manager owns the project
+- **Member management**: Project Manager can add Team Lead / Team Member
+- **Task assignment**: Scope assignable users to project members only
+
+#### [MODIFY] [pm/forms.py](file:///c:/JGpc/app_at_present/app/pm/forms.py)
+- Add `assigned_pm` field to `ProjectForm`
+
+#### [MODIFY] [pm/dashboard.html](file:///c:/JGpc/app_at_present/app/templates/pm/dashboard.html)
+- PM Lead view: all projects grouped by PM, cumulative stats
+- PM view: only their projects, team task distribution
+
+#### [MODIFY] [pm/projects.html](file:///c:/JGpc/app_at_present/app/templates/pm/projects.html)
+- Filter projects based on role
+
+#### [MODIFY] [pm/project_detail.html](file:///c:/JGpc/app_at_present/app/templates/pm/project_detail.html)
+- Show assigned PM prominently
+- Restrict member management based on role
+
+---
+
+### Seed Data
+
+#### [MODIFY] [seed_data.py](file:///c:/JGpc/app_at_present/seed_data.py)
+- Add more PM users (at least 2 Project Managers)
+- Set `pm_role` for existing users
+- Assign projects to individual PMs
+
+---
+
+## Verification Plan
+
+### Automated Tests
+- Seed the database and verify role-based project visibility
+- Verify PM Lead can see all projects, PM can see only theirs
+- Verify Admin PM Overview page loads with all projects
+
+### Manual Verification
+- Login as Admin → verify PM Overview link works, inline stats removed
+- Login as PM Lead → verify dashboard shows all projects grouped by PM
+- Login as Project Manager → verify only their projects appear
+- Login as Team Member → verify only member-of projects appear

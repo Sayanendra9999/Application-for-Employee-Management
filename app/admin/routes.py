@@ -9,7 +9,7 @@ from app.extensions import db
 from app.models import (User, Module, UserModule, Employee, Project, Task,
                         Milestone, Notification,
                         Department, Designation, LeavePolicy, AttendanceRule, AuditLog,
-                        Shift)
+                        Shift, Timesheet)
 from app.admin.forms import UserCreateForm, UserEditForm, ModuleAssignForm
 from app.admin.config_forms import (DepartmentForm, DesignationForm,
                                      LeavePolicyForm, AttendanceRuleForm, ShiftForm)
@@ -54,6 +54,10 @@ def dashboard():
     from app.hr import services as hr_services
     unassigned_employees = hr_services.get_unassigned_count()
 
+    # Timesheet stats
+    total_timesheets = Timesheet.query.count()
+    pending_timesheets = Timesheet.query.filter_by(status='Pending').count()
+
     return render_template('admin/dashboard.html',
                            total_users=total_users,
                            active_users=active_users,
@@ -66,7 +70,9 @@ def dashboard():
                            total_shifts=total_shifts,
                            total_leave_policies=total_leave_policies,
                            recent_users=recent_users,
-                           unassigned_employees=unassigned_employees)
+                           unassigned_employees=unassigned_employees,
+                           total_timesheets=total_timesheets,
+                           pending_timesheets=pending_timesheets)
 
 
 # ===========================================================================
@@ -579,3 +585,217 @@ def pm_overview():
                            active_projects=active,
                            completed_projects=completed,
                            delayed_projects=delayed)
+
+
+# ===========================================================================
+# TIMESHEET MANAGEMENT (Admin Override)
+# ===========================================================================
+@bp.route('/timesheets')
+@admin_required
+def timesheets():
+    """Global timesheet report — all entries, all projects."""
+    status_filter = request.args.get('status', '')
+    project_filter = request.args.get('project', type=int)
+    employee_filter = request.args.get('employee', type=int)
+    date_from = request.args.get('date_from', '')
+    date_to = request.args.get('date_to', '')
+
+    query = Timesheet.query
+    if status_filter:
+        query = query.filter_by(status=status_filter)
+    if project_filter:
+        query = query.filter_by(project_id=project_filter)
+    if employee_filter:
+        query = query.filter_by(employee_id=employee_filter)
+    if date_from:
+        try:
+            from datetime import datetime
+            query = query.filter(Timesheet.date >= datetime.strptime(date_from, '%Y-%m-%d').date())
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            from datetime import datetime
+            query = query.filter(Timesheet.date <= datetime.strptime(date_to, '%Y-%m-%d').date())
+        except ValueError:
+            pass
+
+    records = query.order_by(Timesheet.date.desc()).limit(500).all()
+    projects = Project.query.order_by(Project.name).all()
+    employees = Employee.query.order_by(Employee.emp_code).all()
+
+    total_hours = round(sum(r.hours_worked for r in records), 2)
+    approved_hours = round(sum(r.hours_worked for r in records if r.status == 'Approved'), 2)
+
+    return render_template('admin/timesheets.html', records=records,
+                           projects=projects, employees=employees,
+                           selected_status=status_filter,
+                           selected_project=project_filter,
+                           selected_employee=employee_filter,
+                           date_from=date_from, date_to=date_to,
+                           total_hours=total_hours,
+                           approved_hours=approved_hours)
+
+
+@bp.route('/timesheets/<int:ts_id>/force-approve', methods=['POST'])
+@admin_required
+def force_approve_timesheet(ts_id):
+    """Admin overrides: force-approve a timesheet."""
+    from datetime import datetime
+    ts = Timesheet.query.get_or_404(ts_id)
+
+    if ts.status == 'Approved':
+        flash('Timesheet is already approved.', 'warning')
+        return redirect(url_for('admin.timesheets'))
+
+    old_status = ts.status
+    ts.status = 'Approved'
+    ts.approved_by = session.get('user_id') or 1
+    ts.approved_at = datetime.utcnow()
+
+    # Auto-sync task hours
+    if ts.task_id:
+        task = Task.query.get(ts.task_id)
+        if task:
+            task.actual_hours = (task.actual_hours or 0) + ts.hours_worked
+
+    from flask_login import current_user
+    log_audit(current_user.id, 'FORCE_APPROVE', 'Timesheet', ts.id,
+              f'Admin force-approved (was {old_status}): {ts.hours_worked}h emp#{ts.employee_id}')
+
+    # Notify employee and PM
+    notif = Notification(user_id=ts.employee.user_id,
+                        title='Timesheet Force-Approved',
+                        message=f'Admin force-approved your timesheet for {ts.date.strftime("%d %b %Y")} ({ts.hours_worked}h).',
+                        category='success', link='/employee/timesheets')
+    db.session.add(notif)
+    if ts.project.assigned_pm:
+        pm_notif = Notification(user_id=ts.project.assigned_pm,
+                               title='Admin Override: Timesheet Approved',
+                               message=f'Admin force-approved timesheet #{ts.id} for {ts.employee_name}.',
+                               category='info', link='/pm/timesheet-approvals')
+        db.session.add(pm_notif)
+
+    db.session.commit()
+    flash(f'Timesheet #{ts.id} force-approved by Admin.', 'success')
+    return redirect(url_for('admin.timesheets'))
+
+
+@bp.route('/timesheets/<int:ts_id>/force-reject', methods=['POST'])
+@admin_required
+def force_reject_timesheet(ts_id):
+    """Admin overrides: force-reject a timesheet."""
+    ts = Timesheet.query.get_or_404(ts_id)
+    reason = request.form.get('rejection_reason', 'Admin override').strip()
+
+    old_status = ts.status
+
+    # If it was previously Approved, reverse the hour sync
+    if old_status == 'Approved' and ts.task_id:
+        task = Task.query.get(ts.task_id)
+        if task:
+            task.actual_hours = max(0, (task.actual_hours or 0) - ts.hours_worked)
+
+    ts.status = 'Rejected'
+    ts.rejection_reason = reason
+
+    from flask_login import current_user
+    log_audit(current_user.id, 'FORCE_REJECT', 'Timesheet', ts.id,
+              f'Admin force-rejected (was {old_status}): {reason}')
+
+    notif = Notification(user_id=ts.employee.user_id,
+                        title='Timesheet Force-Rejected',
+                        message=f'Admin rejected your timesheet for {ts.date.strftime("%d %b %Y")}: {reason}',
+                        category='danger', link='/employee/timesheets')
+    db.session.add(notif)
+
+    db.session.commit()
+    flash(f'Timesheet #{ts.id} force-rejected.', 'warning')
+    return redirect(url_for('admin.timesheets'))
+
+
+@bp.route('/timesheets/export')
+@admin_required
+def export_timesheets():
+    """Export timesheets as CSV or Excel."""
+    import csv
+    import io
+    from flask import Response
+
+    fmt = request.args.get('format', 'csv')  # csv or xlsx
+    status_filter = request.args.get('status', '')
+    date_from = request.args.get('date_from', '')
+    date_to = request.args.get('date_to', '')
+
+    query = Timesheet.query
+    if status_filter:
+        query = query.filter_by(status=status_filter)
+    if date_from:
+        try:
+            from datetime import datetime
+            query = query.filter(Timesheet.date >= datetime.strptime(date_from, '%Y-%m-%d').date())
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            from datetime import datetime
+            query = query.filter(Timesheet.date <= datetime.strptime(date_to, '%Y-%m-%d').date())
+        except ValueError:
+            pass
+
+    records = query.order_by(Timesheet.date.desc()).all()
+
+    headers = ['ID', 'Employee Code', 'Employee Name', 'Date', 'Project',
+               'Task', 'Hours', 'Description', 'Status', 'Approved By', 'Approved At']
+
+    rows = []
+    for r in records:
+        rows.append([
+            r.id,
+            r.employee.emp_code,
+            r.employee_name,
+            r.date.strftime('%Y-%m-%d'),
+            r.project_name,
+            r.task_title,
+            r.hours_worked,
+            r.description,
+            r.status,
+            r.approver.full_name if r.approver else '',
+            r.approved_at.strftime('%Y-%m-%d %H:%M') if r.approved_at else ''
+        ])
+
+    if fmt == 'xlsx':
+        try:
+            import openpyxl
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = 'Timesheets'
+            ws.append(headers)
+            for row in rows:
+                ws.append(row)
+            # Style header
+            for cell in ws[1]:
+                cell.font = openpyxl.styles.Font(bold=True)
+            output = io.BytesIO()
+            wb.save(output)
+            output.seek(0)
+            return Response(
+                output.getvalue(),
+                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                headers={'Content-Disposition': 'attachment; filename=timesheets_export.xlsx'}
+            )
+        except ImportError:
+            flash('Excel export requires openpyxl. Falling back to CSV.', 'warning')
+            # Fall through to CSV
+
+    # CSV export
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(headers)
+    writer.writerows(rows)
+
+    return Response(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment; filename=timesheets_export.csv'}
+    )

@@ -7,7 +7,8 @@ from app.pm import bp
 from app.decorators import module_required
 from app.extensions import db
 from app.models import (Project, ProjectMember, Task, Milestone,
-                        Notification, User, AuditLog, Module)
+                        Notification, User, AuditLog, Module,
+                        Timesheet, Employee)
 from app.pm.forms import ProjectForm, TaskForm, MilestoneForm
 
 
@@ -92,6 +93,14 @@ def dashboard():
         user_id=current_user.id, is_read=False
     ).order_by(Notification.created_at.desc()).limit(10).all()
 
+    # Pending timesheet approvals for PM's projects
+    pending_timesheets = 0
+    if visible_ids:
+        pending_timesheets = Timesheet.query.filter(
+            Timesheet.project_id.in_(visible_ids),
+            Timesheet.status == 'Pending'
+        ).count()
+
     return render_template('pm/dashboard.html',
                            total_projects=total_projects,
                            active_projects=active_projects,
@@ -107,7 +116,8 @@ def dashboard():
                            recent_projects=recent_projects,
                            unread_notifications=unread_notifications,
                            is_project_manager=is_project_manager,
-                           is_team_member=is_team_member)
+                           is_team_member=is_team_member,
+                           pending_timesheets=pending_timesheets)
 
 
 # ===========================================================================
@@ -503,33 +513,10 @@ def delete_task(task_id):
 @bp.route('/tasks/<int:task_id>/log-hours', methods=['POST'])
 @module_required('pm')
 def log_task_hours(task_id):
+    """DEPRECATED — Hours are now tracked via the Timesheet system."""
+    flash('Direct hour logging has been replaced by the Timesheet system. '
+          'Please submit hours via Employee Space → My Timesheets.', 'info')
     task = Task.query.get_or_404(task_id)
-    if task.assigned_to != current_user.id:
-        abort(403)
-        
-    actual_hours = request.form.get('actual_hours', type=float)
-    if actual_hours is not None and actual_hours >= 0:
-        task.actual_hours = actual_hours
-        
-        # Optionally mark as Done if user checks the box
-        if request.form.get('mark_done') == 'on':
-            old_status = task.status
-            task.status = 'Done'
-            
-            if old_status != 'Done':
-                project = task.project
-                notify(project.created_by,
-                       'Task Completed',
-                       f'Task "{task.title}" in project "{project.name}" has been marked as Done.',
-                       category='success',
-                       link=url_for('pm.project_detail', project_id=project.id))
-        
-        task.project.check_and_update_status()
-        db.session.commit()
-        flash(f'Logged {actual_hours} hours for "{task.title}".', 'success')
-    else:
-        flash('Invalid hours value.', 'danger')
-        
     return redirect(url_for('pm.project_detail', project_id=task.project_id))
 
 
@@ -731,3 +718,176 @@ def api_notifications():
     unread_count = Notification.query.filter_by(
         user_id=current_user.id, is_read=False).count()
     return jsonify({'notifications': data, 'unread_count': unread_count})
+
+
+# ===========================================================================
+# TIMESHEET APPROVALS
+# ===========================================================================
+@bp.route('/timesheet-approvals')
+@module_required('pm')
+def timesheet_approvals():
+    """PM dashboard for pending timesheet approvals."""
+    visible_projects = _get_user_projects(current_user)
+    visible_ids = [p.id for p in visible_projects]
+
+    status_filter = request.args.get('status', 'Pending')
+    project_filter = request.args.get('project', type=int)
+
+    query = Timesheet.query.filter(Timesheet.project_id.in_(visible_ids)) if visible_ids else Timesheet.query.filter(False)
+
+    if status_filter:
+        query = query.filter(Timesheet.status == status_filter)
+    if project_filter:
+        query = query.filter(Timesheet.project_id == project_filter)
+
+    timesheets = query.order_by(Timesheet.date.desc()).all()
+
+    # Stats for visible projects
+    all_ts = Timesheet.query.filter(Timesheet.project_id.in_(visible_ids)).all() if visible_ids else []
+    stats = {
+        'total': len(all_ts),
+        'pending': sum(1 for t in all_ts if t.status == 'Pending'),
+        'approved': sum(1 for t in all_ts if t.status == 'Approved'),
+        'rejected': sum(1 for t in all_ts if t.status == 'Rejected'),
+        'total_hours': round(sum(t.hours_worked for t in all_ts if t.status == 'Approved'), 2),
+    }
+
+    return render_template('pm/timesheet_approvals.html',
+                           timesheets=timesheets,
+                           stats=stats,
+                           projects=visible_projects,
+                           selected_status=status_filter,
+                           selected_project=project_filter)
+
+
+@bp.route('/timesheets/<int:ts_id>/approve', methods=['POST'])
+@module_required('pm')
+def approve_timesheet(ts_id):
+    """Approve a timesheet entry and auto-sync task.actual_hours."""
+    from datetime import datetime
+    ts = Timesheet.query.get_or_404(ts_id)
+
+    # Verify PM has access to the project
+    visible_projects = _get_user_projects(current_user)
+    visible_ids = [p.id for p in visible_projects]
+    if ts.project_id not in visible_ids:
+        abort(403)
+
+    if ts.status != 'Pending':
+        flash(f'Timesheet is already {ts.status}.', 'warning')
+        return redirect(url_for('pm.timesheet_approvals'))
+
+    ts.status = 'Approved'
+    ts.approved_by = current_user.id
+    ts.approved_at = datetime.utcnow()
+
+    # Auto-sync: Add approved hours to task.actual_hours
+    if ts.task_id:
+        task = Task.query.get(ts.task_id)
+        if task:
+            task.actual_hours = (task.actual_hours or 0) + ts.hours_worked
+
+    # Check and update project status
+    ts.project.check_and_update_status()
+
+    # Audit log
+    log_audit(current_user.id, 'APPROVE_TIMESHEET', 'Timesheet', ts.id,
+              f'Approved {ts.hours_worked}h for emp#{ts.employee_id} on {ts.date}')
+
+    # Notify employee
+    notify(ts.employee.user_id,
+           'Timesheet Approved',
+           f'Your timesheet for {ts.date.strftime("%d %b %Y")} ({ts.hours_worked}h) '
+           f'on "{ts.project_name}" has been approved.',
+           category='success',
+           link='/employee/timesheets')
+
+    db.session.commit()
+    flash(f'Timesheet #{ts.id} approved ({ts.hours_worked}h synced to task).', 'success')
+    return redirect(url_for('pm.timesheet_approvals'))
+
+
+@bp.route('/timesheets/<int:ts_id>/reject', methods=['POST'])
+@module_required('pm')
+def reject_timesheet(ts_id):
+    """Reject a timesheet entry with a reason."""
+    ts = Timesheet.query.get_or_404(ts_id)
+
+    # Verify PM has access
+    visible_projects = _get_user_projects(current_user)
+    visible_ids = [p.id for p in visible_projects]
+    if ts.project_id not in visible_ids:
+        abort(403)
+
+    if ts.status != 'Pending':
+        flash(f'Timesheet is already {ts.status}.', 'warning')
+        return redirect(url_for('pm.timesheet_approvals'))
+
+    rejection_reason = request.form.get('rejection_reason', '').strip()
+    if not rejection_reason:
+        flash('Please provide a rejection reason.', 'danger')
+        return redirect(url_for('pm.timesheet_approvals'))
+
+    ts.status = 'Rejected'
+    ts.rejection_reason = rejection_reason
+    ts.approved_by = current_user.id
+
+    # Audit log
+    log_audit(current_user.id, 'REJECT_TIMESHEET', 'Timesheet', ts.id,
+              f'Rejected timesheet emp#{ts.employee_id}: {rejection_reason}')
+
+    # Notify employee
+    notify(ts.employee.user_id,
+           'Timesheet Rejected',
+           f'Your timesheet for {ts.date.strftime("%d %b %Y")} ({ts.hours_worked}h) '
+           f'on "{ts.project_name}" was rejected: {rejection_reason}',
+           category='danger',
+           link='/employee/timesheets')
+
+    db.session.commit()
+    flash(f'Timesheet #{ts.id} rejected.', 'warning')
+    return redirect(url_for('pm.timesheet_approvals'))
+
+
+@bp.route('/timesheets/bulk-approve', methods=['POST'])
+@module_required('pm')
+def bulk_approve_timesheets():
+    """Bulk approve selected timesheet entries."""
+    from datetime import datetime
+    ts_ids = request.form.getlist('timesheet_ids', type=int)
+    if not ts_ids:
+        flash('No timesheets selected.', 'warning')
+        return redirect(url_for('pm.timesheet_approvals'))
+
+    visible_projects = _get_user_projects(current_user)
+    visible_ids = [p.id for p in visible_projects]
+
+    approved_count = 0
+    for ts_id in ts_ids:
+        ts = Timesheet.query.get(ts_id)
+        if ts and ts.project_id in visible_ids and ts.status == 'Pending':
+            ts.status = 'Approved'
+            ts.approved_by = current_user.id
+            ts.approved_at = datetime.utcnow()
+
+            # Auto-sync task hours
+            if ts.task_id:
+                task = Task.query.get(ts.task_id)
+                if task:
+                    task.actual_hours = (task.actual_hours or 0) + ts.hours_worked
+
+            ts.project.check_and_update_status()
+
+            notify(ts.employee.user_id,
+                   'Timesheet Approved',
+                   f'Your timesheet for {ts.date.strftime("%d %b %Y")} ({ts.hours_worked}h) has been approved.',
+                   category='success',
+                   link='/employee/timesheets')
+            approved_count += 1
+
+    if approved_count > 0:
+        log_audit(current_user.id, 'BULK_APPROVE_TIMESHEETS', 'Timesheet', None,
+                  f'Bulk approved {approved_count} timesheets')
+        db.session.commit()
+    flash(f'{approved_count} timesheets approved.', 'success')
+    return redirect(url_for('pm.timesheet_approvals'))

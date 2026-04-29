@@ -351,3 +351,24 @@ CREATE TABLE IF NOT EXISTS shift_swap_requests (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     reviewed_at DATETIME
 );
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- TIMESHEET TABLES
+-- ═══════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS timesheets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+    date DATE NOT NULL,
+    hours_worked REAL NOT NULL DEFAULT 0.0,
+    description TEXT DEFAULT '',
+    status VARCHAR(20) DEFAULT 'Pending',
+    rejection_reason TEXT DEFAULT '',
+    approved_by INTEGER REFERENCES users(id),
+    approved_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(employee_id, project_id, task_id, date)
+);

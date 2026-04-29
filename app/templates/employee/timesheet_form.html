@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Submit Timesheet — Enterprise Portal{% endblock %}
+{% block page_title %}Submit Timesheet{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="{{ url_for('employee.my_timesheets') }}" class="btn btn-outline-primary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Back to Timesheets
+    </a>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="form-card" style="max-width:100%;">
+            <h5 class="fw-bold mb-4"><i class="fas fa-clock me-2" style="color:var(--primary);"></i>Log Work Hours</h5>
+            <form method="POST" novalidate>
+                {{ form.hidden_tag() }}
+                <div class="row g-3">
+                    <div class="col-md-12">
+                        {{ form.project_id.label(class="form-label") }}
+                        {{ form.project_id(class="form-select", id="project-select") }}
+                        {% if form.project_id.errors %}
+                        <div class="text-danger mt-1" style="font-size:0.8rem;">{{ form.project_id.errors[0] }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-12">
+                        {{ form.task_id.label(class="form-label") }}
+                        {{ form.task_id(class="form-select", id="task-select") }}
+                        <small class="text-muted d-block">Tasks are filtered by the selected project. Leave as "General" for project-level work.</small>
+                        {% if form.task_id.errors %}
+                        <div class="text-danger mt-1" style="font-size:0.8rem;">{{ form.task_id.errors[0] }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        {{ form.date.label(class="form-label") }}
+                        {{ form.date(class="form-control", type="date") }}
+                        {% if form.date.errors %}
+                        <div class="text-danger mt-1" style="font-size:0.8rem;">{{ form.date.errors[0] }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        {{ form.hours_worked.label(class="form-label") }}
+                        {{ form.hours_worked(class="form-control", placeholder="e.g. 4.5", step="0.25", min="0.25", max="24") }}
+                        <small class="text-muted d-block">Min 0.25h, Max 24h. Use decimals (e.g., 1.5 = 1h 30m).</small>
+                        {% if form.hours_worked.errors %}
+                        <div class="text-danger mt-1" style="font-size:0.8rem;">{{ form.hours_worked.errors[0] }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-12">
+                        {{ form.description.label(class="form-label") }}
+                        {{ form.description(class="form-control", rows=4, placeholder="Describe what you worked on...") }}
+                        {% if form.description.errors %}
+                        <div class="text-danger mt-1" style="font-size:0.8rem;">{{ form.description.errors[0] }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+                <hr class="my-4">
+                <div class="d-flex gap-2">
+                    {{ form.submit(class="btn btn-primary") }}
+                    <a href="{{ url_for('employee.my_timesheets') }}" class="btn btn-outline-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="data-card">
+            <div class="card-header"><h5><i class="fas fa-info-circle me-2"></i>Guidelines</h5></div>
+            <div class="p-4">
+                <ul style="font-size:0.85rem; color:var(--text-secondary); padding-left:1rem;">
+                    <li class="mb-2">Log hours for <strong>each task/project</strong> you worked on today.</li>
+                    <li class="mb-2">You can submit <strong>one entry per task per day</strong>.</li>
+                    <li class="mb-2">Hours are <strong>not</strong> reflected on the project until approved by your PM.</li>
+                    <li class="mb-2">Rejected entries can be <strong>edited and re-submitted</strong>.</li>
+                    <li class="mb-2">Cannot log hours for <strong>future dates</strong>.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- AJAX: Dynamic task dropdown based on selected project -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const projectSelect = document.getElementById('project-select');
+    const taskSelect = document.getElementById('task-select');
+
+    if (projectSelect) {
+        projectSelect.addEventListener('change', function() {
+            const projectId = this.value;
+            // Clear task dropdown
+            taskSelect.innerHTML = '<option value="0">— No Task (General) —</option>';
+
+            if (projectId && projectId !== '0') {
+                fetch(`/employee/api/tasks-for-project/${projectId}`)
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.tasks && data.tasks.length > 0) {
+                            data.tasks.forEach(task => {
+                                const opt = document.createElement('option');
+                                opt.value = task.id;
+                                opt.textContent = `${task.title} [${task.status}]`;
+                                taskSelect.appendChild(opt);
+                            });
+                        }
+                    })
+                    .catch(err => console.error('Error loading tasks:', err));
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

@@ -76,32 +76,39 @@
 
 <!-- Stats Row 2: Tasks & Milestones -->
 <div class="row g-4 mb-4">
-    <div class="col-sm-6 col-xl-3">
+    <div class="col-sm-6 col-xl">
         <div class="stat-card blue clickable" id="stat-pending-tasks" onclick="window.location.href='{{ url_for('pm.projects', ext_filter='pending_tasks') }}'">
             <div class="stat-icon"><i class="fas fa-clock"></i></div>
             <div class="stat-value">{{ pending_tasks }}</div>
             <div class="stat-label">Pending Tasks</div>
         </div>
     </div>
-    <div class="col-sm-6 col-xl-3">
+    <div class="col-sm-6 col-xl">
         <div class="stat-card teal clickable" id="stat-done-tasks" onclick="window.location.href='{{ url_for('pm.projects', ext_filter='tasks_done') }}'">
             <div class="stat-icon"><i class="fas fa-check-double"></i></div>
             <div class="stat-value">{{ tasks_done }}</div>
             <div class="stat-label">Tasks Completed</div>
         </div>
     </div>
-    <div class="col-sm-6 col-xl-3">
+    <div class="col-sm-6 col-xl">
         <div class="stat-card pink clickable" id="stat-overdue-tasks" onclick="window.location.href='{{ url_for('pm.projects', ext_filter='overdue_tasks') }}'">
             <div class="stat-icon"><i class="fas fa-exclamation-triangle"></i></div>
             <div class="stat-value">{{ overdue_tasks }}</div>
             <div class="stat-label">Overdue Tasks</div>
         </div>
     </div>
-    <div class="col-sm-6 col-xl-3">
+    <div class="col-sm-6 col-xl">
         <div class="stat-card purple clickable" id="stat-milestones" onclick="window.location.href='{{ url_for('pm.projects', ext_filter='milestones_done') }}'">
             <div class="stat-icon"><i class="fas fa-flag-checkered"></i></div>
             <div class="stat-value">{{ completed_milestones }}/{{ total_milestones }}</div>
             <div class="stat-label">Milestones Done</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl">
+        <div class="stat-card orange clickable" id="stat-pending-timesheets" onclick="window.location.href='{{ url_for('pm.timesheet_approvals') }}'">
+            <div class="stat-icon"><i class="fas fa-file-invoice"></i></div>
+            <div class="stat-value">{{ pending_timesheets }}</div>
+            <div class="stat-label">Pending Timesheets</div>
         </div>
     </div>
 </div>

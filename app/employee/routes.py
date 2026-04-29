@@ -14,7 +14,8 @@ from app.models import LeavePolicy, Shift
 from app.employee import services
 from app.employee.utils import get_current_employee_or_abort, logger
 from app.employee.forms import (ProfileForm, ProfileUpdateRequestForm,
-                                LeaveRequestForm, ExpenseClaimForm)
+                                LeaveRequestForm, ExpenseClaimForm,
+                                TimesheetForm)
 
 
 # ===========================================================================
@@ -49,6 +50,12 @@ def dashboard():
     notifications = services.get_my_notifications(current_user.id, limit=5)
     unread_count = services.get_unread_count(current_user.id)
 
+    # Timesheet summary for dashboard
+    ts_summary = services.get_timesheet_summary(employee.id) if employee else {
+        'total_entries': 0, 'total_hours': 0, 'approved_hours': 0,
+        'pending_hours': 0, 'rejected_count': 0
+    }
+
     return render_template('employee/dashboard.html',
                            employee=employee,
                            profile_complete=profile_complete,
@@ -62,7 +69,8 @@ def dashboard():
                            tasks_pending=tasks_pending,
                            tasks_done=tasks_done,
                            notifications=notifications,
-                           unread_count=unread_count)
+                           unread_count=unread_count,
+                           ts_summary=ts_summary)
 
 
 # ===========================================================================
@@ -443,39 +451,10 @@ def update_task_status(task_id):
 @bp.route('/tasks/<int:task_id>/log-hours', methods=['POST'])
 @module_required('employee')
 def log_task_hours(task_id):
-    """Employee logs actual hours for their task."""
-    from app.models import Task
-    from werkzeug.exceptions import abort
-    from app.employee.utils import create_notification as notify
-
-    task = Task.query.get_or_404(task_id)
-    if task.assigned_to != current_user.id:
-        abort(403)
-        
-    actual_hours = request.form.get('actual_hours', type=float)
-    if actual_hours is not None and actual_hours >= 0:
-        task.actual_hours = actual_hours
-        
-        # Optionally mark as Done if user checks the box
-        if request.form.get('mark_done') == 'on':
-            old_status = task.status
-            task.status = 'Done'
-            
-            if old_status != 'Done':
-                project = task.project
-                notify(project.created_by,
-                       'Task Completed',
-                       f'Task "{task.title}" in project "{project.name}" has been marked as Done.',
-                       category='success',
-                       link=url_for('pm.project_detail', project_id=project.id))
-        
-        task.project.check_and_update_status()
-        db.session.commit()
-        flash(f'Logged {actual_hours} hours for "{task.title}".', 'success')
-    else:
-        flash('Invalid hours value.', 'danger')
-        
-    return redirect(request.referrer or url_for('employee.my_tasks'))
+    """DEPRECATED — Hours are now tracked via the Timesheet system."""
+    flash('Direct hour logging has been replaced by the Timesheet system. '
+          'Please use My Timesheets to submit hours.', 'info')
+    return redirect(url_for('employee.my_timesheets'))
 
 
 # ===========================================================================
@@ -525,4 +504,106 @@ def my_comp_offs():
     comp_offs = services.get_my_comp_offs(employee.id)
     return render_template('employee/comp_offs.html',
                            comp_offs=comp_offs, employee=employee)
+
+
+# ===========================================================================
+# TIMESHEETS
+# ===========================================================================
+@bp.route('/timesheets')
+@module_required('employee')
+def my_timesheets():
+    """View timesheet history with status filter."""
+    employee = get_current_employee_or_abort()
+    status_filter = request.args.get('status', '')
+    date_from = request.args.get('date_from', '')
+    date_to = request.args.get('date_to', '')
+
+    from datetime import datetime as dt
+    d_from = None
+    d_to = None
+    if date_from:
+        try:
+            d_from = dt.strptime(date_from, '%Y-%m-%d').date()
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            d_to = dt.strptime(date_to, '%Y-%m-%d').date()
+        except ValueError:
+            pass
+
+    timesheets = services.get_my_timesheets(
+        employee.id,
+        status=status_filter or None,
+        date_from=d_from,
+        date_to=d_to
+    )
+    summary = services.get_timesheet_summary(employee.id)
+
+    return render_template('employee/my_timesheets.html',
+                           timesheets=timesheets,
+                           summary=summary,
+                           selected_status=status_filter,
+                           date_from=date_from,
+                           date_to=date_to)
+
+
+@bp.route('/timesheets/submit', methods=['GET', 'POST'])
+@module_required('employee')
+def submit_timesheet():
+    """Submit a new timesheet entry."""
+    employee = get_current_employee_or_abort()
+    form = TimesheetForm()
+
+    # Populate project dropdown with assigned projects
+    projects = services.get_assigned_projects_for_employee(current_user.id)
+    form.project_id.choices = [(0, '— Select Project —')] + [
+        (p.id, p.name) for p in projects
+    ]
+    # Task choices will be populated via AJAX on frontend; start with empty
+    form.task_id.choices = [(0, '— No Task (General) —')]
+
+    # On POST, populate task choices so WTForms validation succeeds
+    if request.method == 'POST':
+        try:
+            proj_id = int(request.form.get('project_id', 0))
+            if proj_id > 0:
+                tasks = services.get_tasks_for_project_user(current_user.id, proj_id)
+                form.task_id.choices += [(t.id, t.title) for t in tasks]
+        except ValueError:
+            pass
+
+    if form.validate_on_submit():
+        if form.project_id.data == 0:
+            flash('Please select a project.', 'danger')
+            return render_template('employee/timesheet_form.html',
+                                   form=form, employee=employee)
+
+        success, msg = services.submit_timesheet(
+            employee,
+            project_id=form.project_id.data,
+            task_id=form.task_id.data,
+            ts_date=form.date.data,
+            hours=form.hours_worked.data,
+            description=form.description.data,
+            ip=request.remote_addr or ''
+        )
+        if success:
+            db.session.commit()
+            flash(msg, 'success')
+            return redirect(url_for('employee.my_timesheets'))
+        else:
+            flash(msg, 'danger')
+
+    return render_template('employee/timesheet_form.html',
+                           form=form, employee=employee)
+
+
+@bp.route('/api/tasks-for-project/<int:project_id>')
+@module_required('employee')
+def api_tasks_for_project(project_id):
+    """AJAX endpoint: Get tasks assigned to the current user in a project."""
+    tasks = services.get_tasks_for_project_user(current_user.id, project_id)
+    data = [{'id': t.id, 'title': t.title, 'status': t.status} for t in tasks]
+    return jsonify({'tasks': data})
 

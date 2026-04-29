@@ -53,3 +53,15 @@ class ExpenseClaimForm(FlaskForm):
         FileAllowed(['pdf', 'jpg', 'jpeg', 'png'], 'Only PDF, JPG, PNG files allowed')
     ])
     submit = SubmitField('Submit Claim')
+
+
+class TimesheetForm(FlaskForm):
+    """Timesheet submission form — log hours against a project/task."""
+    project_id = SelectField('Project', coerce=int, validators=[DataRequired()])
+    task_id = SelectField('Task (Optional)', coerce=int, validators=[Optional()])
+    date = DateField('Date', validators=[DataRequired()])
+    hours_worked = FloatField('Hours Worked', validators=[
+        DataRequired(), NumberRange(min=0.25, max=24, message='Hours must be between 0.25 and 24')
+    ])
+    description = TextAreaField('Work Description', validators=[DataRequired(), Length(5, 1000)])
+    submit = SubmitField('Submit Timesheet')

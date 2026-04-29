@@ -47,6 +47,20 @@ class User(UserMixin, db.Model):
         self.password_hash = generate_password_hash(password)
 
     def check_password(self, password):
+        if not self.password_hash:
+            return False
+        # Legacy bcrypt hashes ($2b$, $2a$, $2y$) from older setup
+        if self.password_hash.startswith(('$2b$', '$2a$', '$2y$')):
+            try:
+                import bcrypt
+                valid = bcrypt.checkpw(password.encode('utf-8'),
+                                       self.password_hash.encode('utf-8'))
+                if valid:
+                    # Auto-upgrade to Werkzeug's pbkdf2 format
+                    self.password_hash = generate_password_hash(password)
+                return valid
+            except Exception:
+                return False
         return check_password_hash(self.password_hash, password)
 
     def has_module(self, slug):
@@ -247,6 +261,7 @@ class Employee(db.Model):
     payroll_inputs = db.relationship('PayrollInput', backref='employee', lazy='dynamic')
     comp_offs = db.relationship('CompOff', backref='employee', lazy='dynamic')
     shift_swap_requests = db.relationship('ShiftSwapRequest', backref='employee', lazy='dynamic')
+    timesheets = db.relationship('Timesheet', backref='employee', lazy='dynamic')
 
     @property
     def department_name(self):
@@ -822,3 +837,53 @@ class ShiftSwapRequest(db.Model):
 
     def __repr__(self):
         return f'<ShiftSwapRequest emp#{self.employee_id} {self.status}>'
+
+
+# ===========================================================================
+# TIMESHEET MODEL
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Timesheet — Employee logs hours against projects/tasks
+# ---------------------------------------------------------------------------
+class Timesheet(db.Model):
+    __tablename__ = 'timesheets'
+
+    id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey('employees.id', ondelete='CASCADE'), nullable=False)
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id', ondelete='CASCADE'), nullable=False)
+    task_id = db.Column(db.Integer, db.ForeignKey('tasks.id', ondelete='SET NULL'), nullable=True)
+    date = db.Column(db.Date, nullable=False)
+    hours_worked = db.Column(db.Float, nullable=False, default=0.0)
+    description = db.Column(db.Text, default='')
+    status = db.Column(db.String(20), default='Pending')           # Pending, Approved, Rejected
+    rejection_reason = db.Column(db.Text, default='')
+    approved_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    approved_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    project = db.relationship('Project', backref=db.backref('timesheets', lazy='dynamic'))
+    task = db.relationship('Task', backref=db.backref('timesheets', lazy='dynamic'))
+    approver = db.relationship('User', foreign_keys=[approved_by], backref='approved_timesheets')
+
+    __table_args__ = (
+        db.UniqueConstraint('employee_id', 'project_id', 'task_id', 'date',
+                           name='uq_emp_proj_task_date'),
+    )
+
+    @property
+    def employee_name(self):
+        return self.employee.user.full_name if self.employee and self.employee.user else 'Unknown'
+
+    @property
+    def project_name(self):
+        return self.project.name if self.project else 'Unknown'
+
+    @property
+    def task_title(self):
+        return self.task.title if self.task else '— General —'
+
+    def __repr__(self):
+        return f'<Timesheet #{self.id} emp#{self.employee_id} {self.date} {self.hours_worked}h {self.status}>'

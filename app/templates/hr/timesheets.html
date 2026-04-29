@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Timesheet Records — Enterprise Portal{% endblock %}
+{% block page_title %}Timesheet Records{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+    <div>
+        <h4 style="font-weight:700;">Organization Timesheets</h4>
+        <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">{{ records|length }} records · {{ total_hours }}h total · {{ approved_hours }}h approved</p>
+    </div>
+    <a href="{{ url_for('hr.timesheet_attendance_comparison') }}" class="btn btn-outline-primary btn-sm">
+        <i class="fas fa-chart-bar me-1"></i>Attendance Comparison
+    </a>
+</div>
+
+<!-- Filters -->
+<div class="data-card mb-4">
+    <div class="p-3">
+        <form method="GET" class="d-flex gap-2 flex-wrap align-items-center">
+            <select name="status" class="form-select form-select-sm" style="max-width:140px;">
+                <option value="">All Status</option>
+                <option value="Pending" {% if selected_status == 'Pending' %}selected{% endif %}>Pending</option>
+                <option value="Approved" {% if selected_status == 'Approved' %}selected{% endif %}>Approved</option>
+                <option value="Rejected" {% if selected_status == 'Rejected' %}selected{% endif %}>Rejected</option>
+            </select>
+            <select name="department" class="form-select form-select-sm" style="max-width:180px;">
+                <option value="">All Departments</option>
+                {% for d in departments %}
+                <option value="{{ d.id }}" {% if selected_dept == d.id %}selected{% endif %}>{{ d.name }}</option>
+                {% endfor %}
+            </select>
+            <input type="date" name="date_from" value="{{ date_from }}" class="form-control form-control-sm" style="max-width:150px;">
+            <input type="date" name="date_to" value="{{ date_to }}" class="form-control form-control-sm" style="max-width:150px;">
+            <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-filter me-1"></i>Filter</button>
+            <a href="{{ url_for('hr.timesheets') }}" class="btn btn-outline-secondary btn-sm">Clear</a>
+        </form>
+    </div>
+</div>
+
+<div class="data-card">
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Employee</th>
+                    <th>Code</th>
+                    <th>Date</th>
+                    <th>Project</th>
+                    <th>Task</th>
+                    <th>Hours</th>
+                    <th>Status</th>
+                    <th>Approved By</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in records %}
+                <tr>
+                    <td class="fw-semibold">{{ r.employee_name }}</td>
+                    <td><code>{{ r.employee.emp_code }}</code></td>
+                    <td>{{ r.date.strftime('%d %b %Y') }}</td>
+                    <td>{{ r.project_name }}</td>
+                    <td>{{ r.task_title }}</td>
+                    <td><strong>{{ r.hours_worked }}h</strong></td>
+                    <td><span class="badge-status badge-{{ r.status|lower }}">{{ r.status }}</span></td>
+                    <td>{{ r.approver.full_name if r.approver else '—' }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="text-center py-4" style="color:var(--text-secondary);">No timesheet records found</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

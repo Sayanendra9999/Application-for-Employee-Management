@@ -16,7 +16,7 @@ from app.models import (Employee, User, Leave, Attendance, LeaveBalance,
                         LeavePolicy, Department, Designation,
                         PerformanceReview, PayrollInput, EmployeeDocument,
                         JobPosting, Candidate, Interview,
-                        Shift, CompOff, ShiftSwapRequest)
+                        Shift, CompOff, ShiftSwapRequest, Timesheet)
 from app.hr.forms import (EmployeeForm, LeaveActionForm, CheckInOutForm,
                           AttendanceFilterForm, AttendanceOverrideForm,
                           PerformanceReviewForm,
@@ -58,6 +58,11 @@ def dashboard():
     pending_comp_offs = CompOff.query.filter_by(status='Earned').count()
     total_shifts = Shift.query.filter_by(is_active=True).count()
 
+    # Timesheet stats for HR
+    total_timesheets = Timesheet.query.count()
+    pending_timesheets = Timesheet.query.filter_by(status='Pending').count()
+    approved_ts_hours = db.session.query(db.func.coalesce(db.func.sum(Timesheet.hours_worked), 0)).filter_by(status='Approved').scalar()
+
     return render_template('hr/dashboard.html',
                            total_employees=total_employees,
                            pending_leaves=pending_leaves,
@@ -71,7 +76,10 @@ def dashboard():
                            unassigned_count=unassigned_count,
                            pending_swaps=pending_swaps,
                            pending_comp_offs=pending_comp_offs,
-                           total_shifts=total_shifts)
+                           total_shifts=total_shifts,
+                           total_timesheets=total_timesheets,
+                           pending_timesheets=pending_timesheets,
+                           approved_ts_hours=round(approved_ts_hours, 1))
 
 
 # ===========================================================================
@@ -976,4 +984,87 @@ def run_auto_absent():
     else:
         flash('No employees to mark absent.', 'info')
     return redirect(url_for('hr.attendance'))
-   
+
+
+# ===========================================================================
+# TIMESHEET MANAGEMENT (HR)
+# ===========================================================================
+@bp.route('/timesheets')
+@module_required('hr')
+def timesheets():
+    """Organization-wide timesheet view with filters."""
+    status_filter = request.args.get('status', '')
+    dept_filter = request.args.get('department', type=int)
+    date_from = request.args.get('date_from', '')
+    date_to = request.args.get('date_to', '')
+
+    query = Timesheet.query.join(Employee)
+    if status_filter:
+        query = query.filter(Timesheet.status == status_filter)
+    if dept_filter:
+        query = query.filter(Employee.department_id == dept_filter)
+    if date_from:
+        try:
+            query = query.filter(Timesheet.date >= datetime.strptime(date_from, '%Y-%m-%d').date())
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            query = query.filter(Timesheet.date <= datetime.strptime(date_to, '%Y-%m-%d').date())
+        except ValueError:
+            pass
+
+    records = query.order_by(Timesheet.date.desc()).limit(300).all()
+    departments = Department.query.filter_by(is_active=True).order_by(Department.name).all()
+
+    # Summary stats
+    total_hours = sum(r.hours_worked for r in records)
+    approved_hours = sum(r.hours_worked for r in records if r.status == 'Approved')
+
+    return render_template('hr/timesheets.html', records=records,
+                           departments=departments,
+                           selected_status=status_filter,
+                           selected_dept=dept_filter,
+                           date_from=date_from, date_to=date_to,
+                           total_hours=round(total_hours, 2),
+                           approved_hours=round(approved_hours, 2))
+
+
+@bp.route('/timesheets/attendance-comparison')
+@module_required('hr')
+def timesheet_attendance_comparison():
+    """Side-by-side: Attendance hours vs. Timesheet hours per employee."""
+    year = request.args.get('year', date.today().year, type=int)
+    month = request.args.get('month', date.today().month, type=int)
+
+    employees = Employee.query.order_by(Employee.emp_code).all()
+    comparison = []
+
+    for emp in employees:
+        # Attendance hours this month
+        att_summary = services.get_attendance_summary(emp.id, year, month)
+        att_hours = att_summary.get('total_hours', 0)
+
+        # Timesheet hours this month (approved)
+        ts_entries = Timesheet.query.filter(
+            Timesheet.employee_id == emp.id,
+            Timesheet.status == 'Approved',
+            db.extract('year', Timesheet.date) == year,
+            db.extract('month', Timesheet.date) == month
+        ).all()
+        ts_hours = round(sum(e.hours_worked for e in ts_entries), 2)
+
+        # Overtime flag: timesheet hours > attendance hours
+        overtime_flag = ts_hours > att_hours if att_hours > 0 else False
+
+        comparison.append({
+            'employee': emp,
+            'attendance_hours': round(att_hours, 2),
+            'timesheet_hours': ts_hours,
+            'difference': round(ts_hours - att_hours, 2),
+            'overtime_flag': overtime_flag
+        })
+
+    return render_template('hr/timesheet_comparison.html',
+                           comparison=comparison,
+                           year=year, month=month)

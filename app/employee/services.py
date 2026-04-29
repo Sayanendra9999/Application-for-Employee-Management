@@ -14,7 +14,7 @@ from app.models import (Employee, Attendance, Leave, LeaveBalance, LeavePolicy,
                         SalaryRecord, EmployeeDocument, PerformanceReview,
                         Notification, Project, ProjectMember, Task,
                         ProfileUpdateRequest, EmployeeExpense,
-                        Shift, CompOff, ShiftSwapRequest)
+                        Shift, CompOff, ShiftSwapRequest, Timesheet)
 from app.employee.utils import logger, create_notification, log_employee_action
 
 
@@ -590,4 +590,204 @@ def submit_shift_swap_request(employee, requested_shift_id, reason='', ip=''):
     except Exception as e:
         logger.error(f'Error submitting shift swap: {e}')
         return False, 'An error occurred while submitting your shift swap request'
+
+
+# ===========================================================================
+# TIMESHEET SERVICES
+# ===========================================================================
+def get_my_timesheets(employee_id, status=None, date_from=None, date_to=None):
+    """Get timesheet entries for the employee with optional filters."""
+    try:
+        query = Timesheet.query.filter_by(employee_id=employee_id)
+        if status:
+            query = query.filter_by(status=status)
+        if date_from:
+            query = query.filter(Timesheet.date >= date_from)
+        if date_to:
+            query = query.filter(Timesheet.date <= date_to)
+        return query.order_by(Timesheet.date.desc(), Timesheet.created_at.desc()).all()
+    except Exception as e:
+        logger.error(f'Error fetching timesheets: {e}')
+        return []
+
+
+def get_assigned_projects_for_employee(user_id):
+    """Get projects where the user is a member (for timesheet dropdown)."""
+    try:
+        memberships = ProjectMember.query.filter_by(user_id=user_id).all()
+        project_ids = [m.project_id for m in memberships]
+        if not project_ids:
+            return []
+        return Project.query.filter(
+            Project.id.in_(project_ids),
+            Project.status.in_(['Not Started', 'In Progress'])
+        ).order_by(Project.name).all()
+    except Exception as e:
+        logger.error(f'Error fetching assigned projects: {e}')
+        return []
+
+
+def get_tasks_for_project_user(user_id, project_id):
+    """Get tasks assigned to the user in a specific project."""
+    try:
+        return Task.query.filter_by(
+            project_id=project_id,
+            assigned_to=user_id
+        ).filter(Task.status != 'Done').order_by(Task.title).all()
+    except Exception as e:
+        logger.error(f'Error fetching tasks for project: {e}')
+        return []
+
+
+def submit_timesheet(employee, project_id, task_id, ts_date, hours, description, ip=''):
+    """Submit a timesheet entry. Returns (success, message)."""
+    try:
+        # Validate project membership
+        membership = ProjectMember.query.filter_by(
+            project_id=project_id, user_id=employee.user_id
+        ).first()
+        if not membership:
+            return False, 'You are not a member of this project'
+
+        # Validate task belongs to project and is assigned to user (if task selected)
+        actual_task_id = task_id if task_id and task_id != 0 else None
+        if actual_task_id:
+            task = Task.query.filter_by(
+                id=actual_task_id, project_id=project_id, assigned_to=employee.user_id
+            ).first()
+            if not task:
+                return False, 'Selected task is not assigned to you in this project'
+
+        # Validate date is not in the future
+        if ts_date > date.today():
+            return False, 'Cannot log hours for future dates'
+
+        # Validate hours
+        if hours <= 0 or hours > 24:
+            return False, 'Hours must be between 0.25 and 24'
+
+        # Check for existing entry (allow re-submit of rejected entries)
+        existing = Timesheet.query.filter_by(
+            employee_id=employee.id,
+            project_id=project_id,
+            task_id=actual_task_id,
+            date=ts_date
+        ).first()
+
+        if existing:
+            if existing.status == 'Rejected':
+                # Allow edit and re-submit of rejected entries
+                existing.hours_worked = hours
+                existing.description = description
+                existing.status = 'Pending'
+                existing.rejection_reason = ''
+                existing.approved_by = None
+                existing.approved_at = None
+                existing.updated_at = datetime.utcnow()
+                log_employee_action('RESUBMIT', 'Timesheet', existing.id,
+                                  f'Re-submitted {hours}h for project#{project_id}', ip)
+                logger.info(f'Timesheet #{existing.id} re-submitted by emp#{employee.id}')
+
+                # Notify PM
+                project = Project.query.get(project_id)
+                if project and project.assigned_pm:
+                    create_notification(
+                        project.assigned_pm,
+                        'Timesheet Re-submitted',
+                        f'{employee.user.full_name} re-submitted timesheet for "{project.name}" on {ts_date}',
+                        category='info',
+                        link='/pm/timesheet-approvals'
+                    )
+
+                return True, f'Timesheet re-submitted ({hours}h) for approval'
+            elif existing.status == 'Pending':
+                return False, 'A pending timesheet already exists for this project/task/date'
+            else:
+                return False, 'An approved timesheet already exists for this project/task/date'
+
+        timesheet = Timesheet(
+            employee_id=employee.id,
+            project_id=project_id,
+            task_id=actual_task_id,
+            date=ts_date,
+            hours_worked=hours,
+            description=description,
+            status='Pending'
+        )
+        db.session.add(timesheet)
+
+        log_employee_action('SUBMIT', 'Timesheet', None,
+                          f'{hours}h on {ts_date} for project#{project_id}', ip)
+
+        # Notify PM of the assigned project
+        project = Project.query.get(project_id)
+        if project and project.assigned_pm:
+            create_notification(
+                project.assigned_pm,
+                'New Timesheet Submitted',
+                f'{employee.user.full_name} submitted {hours}h for "{project.name}" on {ts_date}',
+                category='info',
+                link='/pm/timesheet-approvals'
+            )
+
+        # Notify employee
+        create_notification(
+            employee.user_id,
+            'Timesheet Submitted',
+            f'Your timesheet for {ts_date} ({hours}h) has been submitted for approval.',
+            category='info',
+            link='/employee/timesheets'
+        )
+
+        logger.info(f'Timesheet submitted: emp#{employee.id} {hours}h on {ts_date} proj#{project_id}')
+        return True, f'Timesheet submitted ({hours}h on {ts_date}) for PM approval'
+    except Exception as e:
+        logger.error(f'Error submitting timesheet: {e}')
+        return False, 'An error occurred while submitting your timesheet'
+
+
+def get_timesheet_summary(employee_id, year=None, month=None):
+    """Get monthly timesheet summary for the employee."""
+    try:
+        year = year or date.today().year
+        month = month or date.today().month
+
+        query = Timesheet.query.filter_by(employee_id=employee_id)
+        query = query.filter(db.extract('year', Timesheet.date) == year)
+        query = query.filter(db.extract('month', Timesheet.date) == month)
+
+        entries = query.all()
+        total_hours = sum(e.hours_worked for e in entries)
+        approved_hours = sum(e.hours_worked for e in entries if e.status == 'Approved')
+        pending_hours = sum(e.hours_worked for e in entries if e.status == 'Pending')
+        rejected_count = sum(1 for e in entries if e.status == 'Rejected')
+
+        return {
+            'total_entries': len(entries),
+            'total_hours': round(total_hours, 2),
+            'approved_hours': round(approved_hours, 2),
+            'pending_hours': round(pending_hours, 2),
+            'rejected_count': rejected_count
+        }
+    except Exception as e:
+        logger.error(f'Error fetching timesheet summary: {e}')
+        return {'total_entries': 0, 'total_hours': 0, 'approved_hours': 0,
+                'pending_hours': 0, 'rejected_count': 0}
+
+
+def get_weekly_timesheet_hours(employee_id):
+    """Get total hours logged this week."""
+    try:
+        from datetime import timedelta
+        today = date.today()
+        start_of_week = today - timedelta(days=today.weekday())  # Monday
+        entries = Timesheet.query.filter(
+            Timesheet.employee_id == employee_id,
+            Timesheet.date >= start_of_week,
+            Timesheet.date <= today
+        ).all()
+        return round(sum(e.hours_worked for e in entries), 2)
+    except Exception as e:
+        logger.error(f'Error fetching weekly hours: {e}')
+        return 0
 

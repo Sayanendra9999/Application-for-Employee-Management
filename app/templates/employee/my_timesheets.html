@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}My Timesheets — Enterprise Portal{% endblock %}
+{% block page_title %}My Timesheets{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+    <div>
+        <h4 style="font-weight:700;">Timesheet History</h4>
+        <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">{{ timesheets|length }} entries</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('employee.submit_timesheet') }}" class="btn btn-primary btn-sm">
+            <i class="fas fa-plus me-1"></i>Log Hours
+        </a>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-sm-6 col-md-3">
+        <div class="data-card">
+            <div class="p-3 text-center">
+                <div style="font-size:1.6rem; font-weight:700; color:var(--primary);">{{ summary.total_hours }}</div>
+                <div style="font-size:0.78rem; color:var(--text-secondary);">Total Hours (This Month)</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-md-3">
+        <div class="data-card">
+            <div class="p-3 text-center">
+                <div style="font-size:1.6rem; font-weight:700; color:#22c55e;">{{ summary.approved_hours }}</div>
+                <div style="font-size:0.78rem; color:var(--text-secondary);">Approved Hours</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-md-3">
+        <div class="data-card">
+            <div class="p-3 text-center">
+                <div style="font-size:1.6rem; font-weight:700; color:#f59e0b;">{{ summary.pending_hours }}</div>
+                <div style="font-size:0.78rem; color:var(--text-secondary);">Pending Hours</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-md-3">
+        <div class="data-card">
+            <div class="p-3 text-center">
+                <div style="font-size:1.6rem; font-weight:700; color:#ef4444;">{{ summary.rejected_count }}</div>
+                <div style="font-size:0.78rem; color:var(--text-secondary);">Rejected Entries</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="mb-3">
+    <div class="d-flex gap-2 flex-wrap align-items-center">
+        <a href="{{ url_for('employee.my_timesheets') }}" class="btn btn-sm {% if not selected_status %}btn-primary{% else %}btn-outline-primary{% endif %}">All</a>
+        <a href="{{ url_for('employee.my_timesheets', status='Pending') }}" class="btn btn-sm {% if selected_status == 'Pending' %}btn-primary{% else %}btn-outline-primary{% endif %}">Pending</a>
+        <a href="{{ url_for('employee.my_timesheets', status='Approved') }}" class="btn btn-sm {% if selected_status == 'Approved' %}btn-primary{% else %}btn-outline-primary{% endif %}">Approved</a>
+        <a href="{{ url_for('employee.my_timesheets', status='Rejected') }}" class="btn btn-sm {% if selected_status == 'Rejected' %}btn-primary{% else %}btn-outline-primary{% endif %}">Rejected</a>
+        <span class="mx-2" style="color:var(--border-color);">|</span>
+        <form method="GET" class="d-flex gap-2 align-items-center" style="font-size:0.85rem;">
+            {% if selected_status %}<input type="hidden" name="status" value="{{ selected_status }}">{% endif %}
+            <input type="date" name="date_from" value="{{ date_from }}" class="form-control form-control-sm" style="max-width:150px;" placeholder="From">
+            <input type="date" name="date_to" value="{{ date_to }}" class="form-control form-control-sm" style="max-width:150px;" placeholder="To">
+            <button type="submit" class="btn btn-outline-primary btn-sm"><i class="fas fa-filter"></i></button>
+        </form>
+    </div>
+</div>
+
+<!-- Timesheet Table -->
+<div class="data-card">
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Project</th>
+                    <th>Task</th>
+                    <th>Hours</th>
+                    <th>Description</th>
+                    <th>Status</th>
+                    <th>Approved By</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ts in timesheets %}
+                <tr>
+                    <td class="fw-semibold">{{ ts.date.strftime('%d %b %Y') }}</td>
+                    <td>{{ ts.project_name }}</td>
+                    <td>{{ ts.task_title }}</td>
+                    <td><span class="fw-semibold">{{ ts.hours_worked }}h</span></td>
+                    <td style="max-width:200px;">{{ ts.description[:80] }}{% if ts.description|length > 80 %}…{% endif %}</td>
+                    <td><span class="badge-status badge-{{ ts.status|lower }}">{{ ts.status }}</span></td>
+                    <td>{{ ts.approver.full_name if ts.approver else '—' }}</td>
+                </tr>
+                {% if ts.status == 'Rejected' and ts.rejection_reason %}
+                <tr>
+                    <td colspan="7" style="background:rgba(239,68,68,0.05); font-size:0.82rem; color:#ef4444; padding-left:2rem;">
+                        <i class="fas fa-exclamation-circle me-1"></i><strong>Rejection Reason:</strong> {{ ts.rejection_reason }}
+                        <a href="{{ url_for('employee.submit_timesheet') }}" class="ms-3 btn btn-outline-danger btn-sm" style="font-size:0.75rem;">
+                            <i class="fas fa-redo me-1"></i>Re-submit
+                        </a>
+                    </td>
+                </tr>
+                {% endif %}
+                {% else %}
+                <tr><td colspan="7" class="text-center py-4" style="color:var(--text-secondary);">No timesheet entries found</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

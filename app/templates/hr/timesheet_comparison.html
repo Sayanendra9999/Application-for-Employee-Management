@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Timesheet vs Attendance — Enterprise Portal{% endblock %}
+{% block page_title %}Timesheet vs Attendance Comparison{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+    <div>
+        <h4 style="font-weight:700;">Attendance vs. Timesheet Hours</h4>
+        <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">
+            Month: {{ '%02d'|format(month) }}/{{ year }} — Flags potential overtime where timesheet hours exceed attendance hours
+        </p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('hr.timesheets') }}" class="btn btn-outline-primary btn-sm">
+            <i class="fas fa-arrow-left me-1"></i>Back to Timesheets
+        </a>
+    </div>
+</div>
+
+<!-- Month/Year Filter -->
+<div class="data-card mb-4">
+    <div class="p-3">
+        <form method="GET" class="d-flex gap-2 align-items-center">
+            <select name="month" class="form-select form-select-sm" style="max-width:140px;">
+                {% for m in range(1, 13) %}
+                <option value="{{ m }}" {% if month == m %}selected{% endif %}>
+                    {{ ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1] }}
+                </option>
+                {% endfor %}
+            </select>
+            <input type="number" name="year" value="{{ year }}" class="form-control form-control-sm" style="max-width:100px;" min="2020" max="2030">
+            <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-filter me-1"></i>Apply</button>
+        </form>
+    </div>
+</div>
+
+<div class="data-card">
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Employee</th>
+                    <th>Code</th>
+                    <th>Department</th>
+                    <th>Attendance Hours</th>
+                    <th>Timesheet Hours</th>
+                    <th>Difference</th>
+                    <th>Overtime Flag</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in comparison %}
+                <tr {% if item.overtime_flag %}style="background:rgba(239,68,68,0.05);"{% endif %}>
+                    <td class="fw-semibold">{{ item.employee.user.full_name }}</td>
+                    <td><code>{{ item.employee.emp_code }}</code></td>
+                    <td>{{ item.employee.department_name }}</td>
+                    <td>{{ item.attendance_hours }}h</td>
+                    <td>{{ item.timesheet_hours }}h</td>
+                    <td>
+                        <span class="{% if item.difference > 0 %}text-danger fw-bold{% elif item.difference < 0 %}text-warning{% endif %}">
+                            {{ '%+.1f'|format(item.difference) }}h
+                        </span>
+                    </td>
+                    <td>
+                        {% if item.overtime_flag %}
+                        <span class="badge-status badge-rejected"><i class="fas fa-exclamation-triangle me-1"></i>Overtime</span>
+                        {% else %}
+                        <span style="color:var(--text-secondary);">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" class="text-center py-4" style="color:var(--text-secondary);">No data available</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
