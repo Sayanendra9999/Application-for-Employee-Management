@@ -607,3 +607,102 @@ def api_tasks_for_project(project_id):
     data = [{'id': t.id, 'title': t.title, 'status': t.status} for t in tasks]
     return jsonify({'tasks': data})
 
+
+# ===========================================================================
+# ANALYTICS
+# ===========================================================================
+@bp.route('/analytics')
+@module_required('employee')
+def analytics():
+    """Employee personal work analytics with graphical charts and drill-down."""
+    from collections import defaultdict
+    from datetime import timedelta, date as date_cls
+    from app.models import Task, Timesheet, Project, ProjectMember
+
+    employee = current_user.employee
+    my_tasks = services.get_my_tasks(current_user.id)
+
+    # --- Daily Hours Trend (last 30 days) ---
+    today = date_cls.today()
+    thirty_ago = today - timedelta(days=30)
+    daily_map = defaultdict(float)
+    if employee:
+        recent_ts = Timesheet.query.filter(
+            Timesheet.employee_id == employee.id,
+            Timesheet.date >= thirty_ago,
+            Timesheet.status.in_(['Approved', 'Pending'])
+        ).all()
+        for ts in recent_ts:
+            daily_map[ts.date.strftime('%d %b')] += ts.hours_worked
+
+    date_labels = []
+    date_values = []
+    for i in range(30, -1, -1):
+        d = today - timedelta(days=i)
+        label = d.strftime('%d %b')
+        date_labels.append(label)
+        date_values.append(round(daily_map.get(label, 0), 1))
+
+    daily_hours_data = {'labels': date_labels, 'values': date_values}
+
+    # --- Project Overview Data (Rich structure for Drill-down) ---
+    projects_overview = {}
+    for t in my_tasks:
+        if t.project:
+            p = t.project
+            if p.id not in projects_overview:
+                
+                # Get actual hours logged by this employee on this project
+                approved_hours = 0
+                if employee:
+                    approved_ts = Timesheet.query.filter_by(
+                        employee_id=employee.id, project_name=p.name, status='Approved'
+                    ).all()
+                    approved_hours = sum(ts.hours_worked for ts in approved_ts)
+                
+                mgr_name = "Unassigned"
+                if p.assigned_pm:
+                    from app.models import User
+                    m = User.query.get(p.assigned_pm)
+                    if m: mgr_name = m.full_name
+
+                projects_overview[p.id] = {
+                    'id': p.id,
+                    'name': p.name,
+                    'description': p.description,
+                    'status': p.status,
+                    'progress': p.progress,
+                    'start_date': p.start_date.strftime('%Y-%m-%d') if p.start_date else '',
+                    'end_date': p.end_date.strftime('%Y-%m-%d') if p.end_date else '',
+                    'manager': mgr_name,
+                    'my_logged_hours': round(approved_hours, 1),
+                    'tasks': []
+                }
+            
+            projects_overview[p.id]['tasks'].append({
+                'id': t.id,
+                'title': t.title,
+                'status': t.status,
+                'priority': t.priority,
+                'assigned_to': current_user.full_name, # Since these are "my tasks"
+                'estimated_hours': round(t.estimated_hours or 0, 1),
+                'actual_hours': round(t.actual_hours or 0, 1),
+                'deadline': t.due_date.strftime('%Y-%m-%d') if t.due_date else ''
+            })
+    
+    projects_data = sorted(list(projects_overview.values()), key=lambda x: x['name'])
+
+    # Stats
+    total_hours = sum(p['my_logged_hours'] for p in projects_data)
+    stats = {
+        'total_tasks': len(my_tasks),
+        'done_tasks': sum(1 for t in my_tasks if t.status == 'Done'),
+        'total_hours': round(total_hours, 1)
+    }
+
+    return render_template('employee/analytics.html',
+                           stats=stats,
+                           daily_hours_data=daily_hours_data,
+                           projects_data=projects_data)
+
+

@@ -1,0 +1,445 @@
+{% extends "base.html" %}
+{% block title %}My Work Analytics — Enterprise Portal{% endblock %}
+{% block page_title %}My Work Analytics{% endblock %}
+
+{% block extra_css %}
+<style>
+.chart-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 24px;
+    transition: box-shadow 0.3s ease;
+}
+.chart-card:hover {
+    box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+}
+.chart-card h6 {
+    font-weight: 700;
+    font-size: 0.95rem;
+    margin-bottom: 4px;
+}
+.chart-card .chart-subtitle {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+}
+.chart-wrapper {
+    position: relative;
+    width: 100%;
+}
+.chart-wrapper.doughnut {
+    max-width: 300px;
+    margin: 0 auto;
+}
+.analytics-header {
+    background: linear-gradient(135deg, #0ea5e9, #6366f1);
+    border-radius: 16px;
+    padding: 28px 32px;
+    margin-bottom: 28px;
+    color: white;
+}
+.analytics-header h4 {
+    font-weight: 800;
+    margin-bottom: 4px;
+}
+.analytics-header p {
+    opacity: 0.85;
+    font-size: 0.88rem;
+    margin: 0;
+}
+.metric-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 12px;
+    padding: 8px 16px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    backdrop-filter: blur(10px);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Analytics Header -->
+<div class="analytics-header">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+            <h4><i class="fas fa-chart-pie me-2"></i>My Work Analytics</h4>
+            <p>Visual overview of your tasks, projects, and logged hours</p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <span class="metric-pill"><i class="fas fa-tasks"></i>{{ stats.total_tasks }} Tasks</span>
+            <span class="metric-pill"><i class="fas fa-check-double"></i>{{ stats.done_tasks }} Done</span>
+            <span class="metric-pill"><i class="fas fa-clock"></i>{{ stats.total_hours }}h Logged</span>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Row -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card shadow-sm" style="border-radius: 12px; border: 1px solid var(--border-color);">
+            <div class="card-body p-3 d-flex flex-wrap gap-3 align-items-end">
+                <div style="flex:1; min-width:200px;">
+                    <label class="form-label text-secondary fw-semibold small mb-1">Filter by Project</label>
+                    <select id="filterProject" class="form-select">
+                        <option value="all">All Projects</option>
+                    </select>
+                </div>
+                <div style="flex:1; min-width:200px;">
+                    <label class="form-label text-secondary fw-semibold small mb-1">Filter by Task Status</label>
+                    <select id="filterTaskStatus" class="form-select">
+                        <option value="all">All Statuses</option>
+                        <option value="Done">Done</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Pending">Pending</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Row 1: Task Status + Daily Hours -->
+<div class="row g-4 mb-4">
+    <div class="col-lg-4">
+        <div class="chart-card">
+            <h6><i class="fas fa-list-check me-2" style="color:#6366f1;"></i>My Task Status</h6>
+            <p class="chart-subtitle">Distribution of your assigned tasks</p>
+            <div class="chart-wrapper doughnut">
+                <canvas id="chartMyTaskStatus"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-8">
+        <div class="chart-card">
+            <h6><i class="fas fa-chart-line me-2" style="color:#8b5cf6;"></i>Daily Hours Trend (Last 30 Days)</h6>
+            <p class="chart-subtitle">Your logged and approved hours over time</p>
+            <div class="chart-wrapper" style="height: 300px;">
+                <canvas id="chartDailyHours"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Row 2: Task Completion per Project + Project Completion -->
+<div class="row g-4 mb-4">
+    <div class="col-lg-6">
+        <div class="chart-card">
+            <h6><i class="fas fa-diagram-project me-2" style="color:#0ea5e9;"></i>My Tasks per Project</h6>
+            <p class="chart-subtitle">Click a bar to drill down into the project tasks</p>
+            <div class="chart-wrapper" style="height: 320px;">
+                <canvas id="chartTasksPerProject"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="chart-card">
+            <h6><i class="fas fa-percent me-2" style="color:#14b8a6;"></i>Overall Project Completion</h6>
+            <p class="chart-subtitle">Progress of the projects you are involved in</p>
+            <div class="chart-wrapper" style="height: 320px;">
+                <canvas id="chartProjectCompletion"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Drill-Down Section (Hidden by default) -->
+<div id="drillDownSection" style="display: none;">
+    <h5 class="fw-bold mb-3"><i class="fas fa-magnifying-glass-chart me-2"></i>Project Details & My Tasks</h5>
+    
+    <div class="card shadow-sm mb-4" style="border:1px solid var(--border-color); border-radius:12px;">
+        <div class="card-header bg-transparent py-3 d-flex justify-content-between align-items-center">
+            <h5 class="m-0 fw-bold text-primary" id="ddProjectName">Project Name</h5>
+            <span class="badge" id="ddProjectStatus">Status</span>
+        </div>
+        <div class="card-body">
+            <p class="text-muted mb-4" id="ddProjectDesc">Project description...</p>
+            <div class="row g-3">
+                <div class="col-md-3 col-sm-6">
+                    <div class="small text-secondary fw-semibold">Manager</div>
+                    <div class="fw-bold" id="ddProjectManager">Name</div>
+                </div>
+                <div class="col-md-3 col-sm-6">
+                    <div class="small text-secondary fw-semibold">Timeline</div>
+                    <div class="fw-bold" id="ddProjectTimeline">Start - End</div>
+                </div>
+                <div class="col-md-3 col-sm-6">
+                    <div class="small text-secondary fw-semibold">My Logged Hours</div>
+                    <div class="fw-bold" id="ddProjectHours">0h</div>
+                </div>
+                <div class="col-md-3 col-sm-6">
+                    <div class="small text-secondary fw-semibold">Overall Progress</div>
+                    <div class="d-flex align-items-center gap-2 mt-1">
+                        <div class="progress flex-grow-1" style="height: 6px;">
+                            <div id="ddProjectProgressBar" class="progress-bar" role="progressbar"></div>
+                        </div>
+                        <span id="ddProjectProgressText" class="fw-bold small">0%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <h6 class="fw-bold mb-3"><i class="fas fa-tasks me-2"></i>My Tasks in this Project</h6>
+    <div class="row g-3" id="ddTasksGrid">
+        <!-- Task cards injected here -->
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const rawData = {{ projects_data | tojson }};
+    const dailyHoursData = {{ daily_hours_data | tojson }};
+    
+    // Theme configs
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark' || window.matchMedia('(prefers-color-scheme: dark)').matches;
+    Chart.defaults.color = isDark ? '#cbd5e1' : '#475569';
+    Chart.defaults.font.family = "'Inter', sans-serif";
+    const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+
+    // DOM Elements
+    const filterProj = document.getElementById('filterProject');
+    const filterTaskStatus = document.getElementById('filterTaskStatus');
+    const drillDownSec = document.getElementById('drillDownSection');
+
+    // Populate Filters
+    rawData.forEach(p => {
+        filterProj.add(new Option(p.name, p.id));
+    });
+
+    let chartMyTaskStatus = null;
+    let chartTasksPerProject = null;
+    let chartProjectCompletion = null;
+
+    // Daily hours never changes based on project filter
+    new Chart(document.getElementById('chartDailyHours'), {
+        type: 'line',
+        data: {
+            labels: dailyHoursData.labels,
+            datasets: [{
+                label: 'Hours',
+                data: dailyHoursData.values,
+                fill: true,
+                backgroundColor: 'rgba(139,92,246,0.1)',
+                borderColor: '#8b5cf6',
+                borderWidth: 2,
+                tension: 0.4,
+                pointBackgroundColor: '#8b5cf6',
+                pointBorderColor: '#fff',
+                pointBorderWidth: 2,
+                pointRadius: 3,
+                pointHoverRadius: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } },
+                y: { grid: { color: gridColor }, beginAtZero: true, ticks: { callback: v => v + 'h' } }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { label: ctx => ctx.parsed.y + ' hours' } }
+            }
+        }
+    });
+
+    function renderCharts() {
+        const pId = filterProj.value;
+        const tStat = filterTaskStatus.value;
+
+        // Filter projects
+        let filteredProjects = rawData.filter(p => {
+            if (pId !== 'all' && p.id.toString() !== pId) return false;
+            return true;
+        });
+
+        // Compute filtered tasks
+        let allFilteredTasks = [];
+        let taskStatusCounts = { 'Pending': 0, 'In Progress': 0, 'Done': 0 };
+        
+        filteredProjects.forEach(p => {
+            p.tasks.forEach(t => {
+                if (tStat === 'all' || t.status === tStat) {
+                    allFilteredTasks.push(t);
+                    taskStatusCounts[t.status] = (taskStatusCounts[t.status] || 0) + 1;
+                }
+            });
+        });
+
+        drillDownSec.style.display = 'none';
+
+        // 1. My Task Status Doughnut
+        if (chartMyTaskStatus) chartMyTaskStatus.destroy();
+        chartMyTaskStatus = new Chart(document.getElementById('chartMyTaskStatus'), {
+            type: 'doughnut',
+            data: {
+                labels: ['Pending', 'In Progress', 'Done'],
+                datasets: [{
+                    data: [taskStatusCounts['Pending'], taskStatusCounts['In Progress'], taskStatusCounts['Done']],
+                    backgroundColor: ['#ef4444','#f59e0b','#22c55e'],
+                    borderWidth: 0,
+                    hoverOffset: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                cutout: '65%',
+                plugins: {
+                    legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true, pointStyleWidth: 10 } }
+                }
+            }
+        });
+
+        // 2. Tasks Per Project Stacked
+        const projectLabels = filteredProjects.map(p => p.name);
+        const pendingData = filteredProjects.map(p => p.tasks.filter(t => t.status === 'Pending' && (tStat === 'all' || tStat === 'Pending')).length);
+        const progData = filteredProjects.map(p => p.tasks.filter(t => t.status === 'In Progress' && (tStat === 'all' || tStat === 'In Progress')).length);
+        const doneData = filteredProjects.map(p => p.tasks.filter(t => t.status === 'Done' && (tStat === 'all' || tStat === 'Done')).length);
+
+        if (chartTasksPerProject) chartTasksPerProject.destroy();
+        chartTasksPerProject = new Chart(document.getElementById('chartTasksPerProject'), {
+            type: 'bar',
+            data: {
+                labels: projectLabels,
+                datasets: [
+                    { label: 'Pending', data: pendingData, backgroundColor: '#ef4444', borderRadius: 4, maxBarThickness: 45 },
+                    { label: 'In Progress', data: progData, backgroundColor: '#f59e0b', borderRadius: 4, maxBarThickness: 45 },
+                    { label: 'Done', data: doneData, backgroundColor: '#22c55e', borderRadius: 4, maxBarThickness: 45 }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                onClick: (e, elements) => {
+                    if (elements.length > 0) {
+                        showDrillDown(filteredProjects[elements[0].index], tStat);
+                    }
+                },
+                scales: {
+                    x: { stacked: true, grid: { display: false } },
+                    y: { stacked: true, grid: { color: gridColor }, ticks: { stepSize: 1 } }
+                },
+                plugins: {
+                    legend: { position: 'top' }
+                }
+            }
+        });
+
+        // 3. Project Completion
+        if (chartProjectCompletion) chartProjectCompletion.destroy();
+        chartProjectCompletion = new Chart(document.getElementById('chartProjectCompletion'), {
+            type: 'bar',
+            data: {
+                labels: projectLabels,
+                datasets: [{
+                    label: 'Completion %',
+                    data: filteredProjects.map(p => p.progress),
+                    backgroundColor: filteredProjects.map(p => {
+                        if (p.progress === 100) return '#22c55e'; 
+                        if (p.progress > 0) return '#0ea5e9'; 
+                        return '#cbd5e1'; 
+                    }),
+                    borderRadius: 4,
+                    maxBarThickness: 30
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                onClick: (e, elements) => {
+                    if (elements.length > 0) {
+                        showDrillDown(filteredProjects[elements[0].index], tStat);
+                    }
+                },
+                scales: {
+                    x: { min: 0, max: 100, grid: { color: gridColor }, ticks: { callback: v => v + '%' } },
+                    y: { grid: { display: false } }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: ctx => 'Completion: ' + ctx.parsed.x + '%' } }
+                }
+            }
+        });
+    }
+
+    function showDrillDown(project, statusFilter) {
+        drillDownSec.style.display = 'block';
+        
+        // Populate Project Card
+        document.getElementById('ddProjectName').textContent = project.name;
+        document.getElementById('ddProjectDesc').textContent = project.description || 'No description provided.';
+        document.getElementById('ddProjectManager').textContent = project.manager;
+        document.getElementById('ddProjectTimeline').textContent = `${project.start_date || 'N/A'} to ${project.end_date || 'N/A'}`;
+        document.getElementById('ddProjectHours').textContent = `${project.my_logged_hours}h`;
+        
+        const pb = document.getElementById('ddProjectProgressBar');
+        pb.style.width = project.progress + '%';
+        pb.className = 'progress-bar ' + (project.progress === 100 ? 'bg-success' : (project.progress > 0 ? 'bg-warning' : 'bg-danger'));
+        document.getElementById('ddProjectProgressText').textContent = project.progress + '%';
+
+        const st = document.getElementById('ddProjectStatus');
+        st.textContent = project.status;
+        st.className = 'badge ' + (project.status === 'Completed' ? 'bg-success' : (project.status === 'In Progress' ? 'bg-warning text-dark' : 'bg-secondary'));
+
+        // Populate Tasks Grid
+        const grid = document.getElementById('ddTasksGrid');
+        grid.innerHTML = '';
+        
+        const visibleTasks = project.tasks.filter(t => statusFilter === 'all' || t.status === statusFilter);
+
+        if (visibleTasks.length === 0) {
+            grid.innerHTML = '<div class="col-12"><p class="text-muted">No tasks associated with this project match the filters.</p></div>';
+            return;
+        }
+
+        visibleTasks.forEach(t => {
+            const statusColor = t.status === 'Done' ? 'text-success bg-success' : (t.status === 'In Progress' ? 'text-warning bg-warning' : 'text-danger bg-danger');
+            const prioColor = t.priority === 'High' || t.priority === 'Critical' ? 'text-danger' : (t.priority === 'Medium' ? 'text-primary' : 'text-secondary');
+            
+            grid.innerHTML += `
+                <div class="col-md-6 col-lg-4">
+                    <div class="card h-100 border-0 shadow-sm" style="border-radius:10px; border-left: 4px solid ${t.status === 'Done' ? '#22c55e' : (t.status === 'In Progress' ? '#f59e0b' : '#ef4444')} !important;">
+                        <div class="card-body p-3">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <h6 class="fw-bold mb-0 text-truncate" style="max-width:70%;" title="${t.title}">${t.title}</h6>
+                                <span class="badge ${statusColor} bg-opacity-10 border border-opacity-25" style="font-size:0.7rem;">${t.status}</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center small">
+                                <span class="fw-semibold ${prioColor}"><i class="fas fa-flag me-1"></i>${t.priority}</span>
+                                <span><i class="fas fa-clock me-1"></i>${t.actual_hours}h / ${t.estimated_hours}h</span>
+                            </div>
+                            <div class="small text-muted mt-2 border-top pt-2">
+                                <i class="fas fa-calendar-alt me-1"></i>Deadline: <span class="fw-semibold text-dark">${t.deadline || 'None'}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        // Scroll to drill-down
+        drillDownSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // Event Listeners
+    filterProj.addEventListener('change', renderCharts);
+    filterTaskStatus.addEventListener('change', renderCharts);
+
+    // Initial render
+    renderCharts();
+});
+</script>
+{% endblock %}

@@ -121,6 +121,77 @@ def dashboard():
 
 
 # ===========================================================================
+# ANALYTICS
+# ===========================================================================
+@bp.route('/analytics')
+@module_required('pm')
+def analytics():
+    """PM Analytics dashboard with highly interactive, filterable graphical representations."""
+    visible_projects = _get_user_projects(current_user)
+    
+    projects_data = []
+    
+    for p in visible_projects:
+        # Get actual hours from approved timesheets
+        approved_hours = db.session.query(
+            db.func.coalesce(db.func.sum(Timesheet.hours_worked), 0)
+        ).filter_by(project_id=p.id, status='Approved').scalar()
+        
+        actual_h = round(float(approved_hours), 1)
+        est_h = round(p.estimated_hours or 0, 1)
+
+        # Get manager name
+        mgr_name = "Unassigned"
+        if p.assigned_pm:
+            m = User.query.get(p.assigned_pm)
+            if m: mgr_name = m.full_name
+
+        # Gather tasks
+        p_tasks = []
+        for t in p.tasks:
+            assigned_name = "Unassigned"
+            if t.assigned_to:
+                u = User.query.get(t.assigned_to)
+                if u: assigned_name = u.full_name
+            p_tasks.append({
+                'id': t.id,
+                'title': t.title,
+                'status': t.status,
+                'priority': t.priority,
+                'assigned_to': assigned_name,
+                'estimated_hours': round(t.estimated_hours or 0, 1),
+                'actual_hours': round(t.actual_hours or 0, 1),
+                'deadline': t.due_date.strftime('%Y-%m-%d') if t.due_date else ''
+            })
+
+        projects_data.append({
+            'id': p.id,
+            'name': p.name,
+            'description': p.description,
+            'status': p.status,
+            'progress': p.progress,
+            'start_date': p.start_date.strftime('%Y-%m-%d') if p.start_date else '',
+            'end_date': p.end_date.strftime('%Y-%m-%d') if p.end_date else '',
+            'manager': mgr_name,
+            'estimated_hours': est_h,
+            'actual_hours': actual_h,
+            'tasks': p_tasks
+        })
+
+    # Total aggregate stats
+    total_tasks = sum(len(p['tasks']) for p in projects_data)
+    total_hours = sum(p['actual_hours'] for p in projects_data)
+    
+    stats = {
+        'total_projects': len(projects_data),
+        'total_tasks': total_tasks,
+        'total_hours': round(total_hours, 1)
+    }
+
+    return render_template('pm/analytics.html',
+                           stats=stats,
+                           projects_data=projects_data)
+# ===========================================================================
 # NOTIFICATIONS
 # ===========================================================================
 @bp.route('/notifications')

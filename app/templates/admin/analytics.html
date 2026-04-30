@@ -1,0 +1,494 @@
+{% extends "base.html" %}
+{% block title %}Organization Analytics — Enterprise Portal{% endblock %}
+{% block page_title %}Organization Analytics{% endblock %}
+
+{% block extra_css %}
+<style>
+.chart-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 24px;
+    transition: box-shadow 0.3s ease;
+}
+.chart-card:hover {
+    box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+}
+.chart-card h6 {
+    font-weight: 700;
+    font-size: 0.95rem;
+    margin-bottom: 4px;
+}
+.chart-card .chart-subtitle {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+}
+.chart-wrapper {
+    position: relative;
+    width: 100%;
+}
+.chart-wrapper.doughnut {
+    max-width: 320px;
+    margin: 0 auto;
+}
+.analytics-header {
+    background: linear-gradient(135deg, #1e293b, #334155);
+    border-radius: 16px;
+    padding: 28px 32px;
+    margin-bottom: 28px;
+    color: white;
+}
+.analytics-header h4 {
+    font-weight: 800;
+    margin-bottom: 4px;
+}
+.analytics-header p {
+    opacity: 0.85;
+    font-size: 0.88rem;
+    margin: 0;
+}
+.metric-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255,255,255,0.12);
+    border-radius: 12px;
+    padding: 8px 16px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    backdrop-filter: blur(10px);
+}
+.nav-pills-analytics .nav-link {
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    padding: 8px 18px;
+    color: var(--text-secondary);
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+}
+.nav-pills-analytics .nav-link.active {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: white;
+    border-color: transparent;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Analytics Header -->
+<div class="analytics-header">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+            <h4><i class="fas fa-chart-bar me-2"></i>Organization Analytics</h4>
+            <p>Complete visibility into projects, employees, and work distribution</p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <span class="metric-pill"><i class="fas fa-folder-open"></i>{{ stats.total_projects }} Projects</span>
+            <span class="metric-pill"><i class="fas fa-users"></i>{{ stats.total_employees }} Employees</span>
+            <span class="metric-pill"><i class="fas fa-clock"></i>{{ stats.total_hours }}h Logged</span>
+        </div>
+    </div>
+</div>
+
+<!-- Row 1: Project Status + Task Status -->
+<div class="row g-4 mb-4">
+    <div class="col-md-4">
+        <div class="chart-card">
+            <h6><i class="fas fa-circle-dot me-2" style="color:#6366f1;"></i>Project Status</h6>
+            <p class="chart-subtitle">All projects by current status</p>
+            <div class="chart-wrapper doughnut">
+                <canvas id="chartProjectStatus"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="chart-card">
+            <h6><i class="fas fa-list-check me-2" style="color:#22c55e;"></i>Task Status</h6>
+            <p class="chart-subtitle">All tasks across all projects</p>
+            <div class="chart-wrapper doughnut">
+                <canvas id="chartTaskStatus"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="chart-card">
+            <h6><i class="fas fa-flag me-2" style="color:#f59e0b;"></i>Task Priority</h6>
+            <p class="chart-subtitle">Priority distribution across all tasks</p>
+            <div class="chart-wrapper doughnut">
+                <canvas id="chartTaskPriority"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Row 2: Hours per Project -->
+<div class="row g-4 mb-4">
+    <div class="col-lg-12">
+        <div class="chart-card">
+            <h6><i class="fas fa-bars-progress me-2" style="color:#8b5cf6;"></i>Estimated vs Actual Hours per Project</h6>
+            <p class="chart-subtitle">Compares planned vs actual effort across all projects</p>
+            <div class="chart-wrapper" style="height: 380px;">
+                <canvas id="chartHoursComparison"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Row 3: Employee Workload -->
+<div class="row g-4 mb-4">
+    <div class="col-lg-12">
+        <div class="chart-card">
+            <h6><i class="fas fa-user-gear me-2" style="color:#0ea5e9;"></i>Employee Workload — Tasks Assigned</h6>
+            <p class="chart-subtitle">Number of tasks per employee, split by status (top 15)</p>
+            <div class="chart-wrapper" style="height: 400px;">
+                <canvas id="chartEmployeeWorkload"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Row 4: Employee Hours + Project Progress -->
+<div class="row g-4 mb-4">
+    <div class="col-lg-7">
+        <div class="chart-card">
+            <h6><i class="fas fa-clock me-2" style="color:#14b8a6;"></i>Top Employees by Hours Logged</h6>
+            <p class="chart-subtitle">Top 15 employees by approved timesheet hours</p>
+            <div class="chart-wrapper" style="height: 380px;">
+                <canvas id="chartEmployeeHours"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="chart-card">
+            <h6><i class="fas fa-chart-line me-2" style="color:#ec4899;"></i>Project Progress</h6>
+            <p class="chart-subtitle">Completion % for each project</p>
+            <div class="chart-wrapper" style="height: 380px;">
+                <canvas id="chartProjectProgress"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Row 5: Department Distribution -->
+<div class="row g-4 mb-4">
+    <div class="col-lg-5">
+        <div class="chart-card">
+            <h6><i class="fas fa-building me-2" style="color:#f97316;"></i>Employees by Department</h6>
+            <p class="chart-subtitle">Workforce distribution across departments</p>
+            <div class="chart-wrapper doughnut">
+                <canvas id="chartDeptDistribution"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="chart-card">
+            <h6><i class="fas fa-calendar-week me-2" style="color:#6366f1;"></i>Daily Hours Trend (Last 30 Days)</h6>
+            <p class="chart-subtitle">Total hours logged per day across the organization</p>
+            <div class="chart-wrapper" style="height: 300px;">
+                <canvas id="chartDailyTrend"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Quick Links Modal -->
+<div class="modal fade" id="quickLinksModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content border-0 shadow-lg" style="border-radius:16px;">
+      <div class="modal-header border-bottom-0 pb-0">
+        <h5 class="modal-title fw-bold">
+            <i class="fas fa-link me-2 text-primary"></i><span id="quickLinksTitle">Quick Links</span>
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-4">
+        <div class="list-group list-group-flush gap-2" id="quickLinksList">
+            <!-- Links injected here -->
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark' ||
+                   window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const textColor = isDark ? '#cbd5e1' : '#475569';
+    const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+    Chart.defaults.color = textColor;
+    Chart.defaults.font.family = "'Inter', sans-serif";
+
+    const projectStatusData = {{ project_status_data | tojson }};
+    const taskStatusData = {{ task_status_data | tojson }};
+    const priorityData = {{ priority_data | tojson }};
+    const hoursCompData = {{ hours_comparison_data | tojson }};
+    const empWorkloadData = {{ employee_workload_data | tojson }};
+    const empHoursData = {{ employee_hours_data | tojson }};
+    const progressData = {{ progress_data | tojson }};
+    const deptData = {{ dept_distribution_data | tojson }};
+    const dailyTrendData = {{ daily_trend_data | tojson }};
+
+    const palette = ['#6366f1','#22c55e','#f59e0b','#ef4444','#0ea5e9','#ec4899','#8b5cf6','#14b8a6','#f97316','#64748b','#06b6d4','#a855f7','#10b981','#e11d48','#84cc16'];
+
+    let quickLinksModalObj = null;
+    function showQuickLinksModal(title, detailsList) {
+        if (!quickLinksModalObj) {
+            quickLinksModalObj = new bootstrap.Modal(document.getElementById('quickLinksModal'));
+        }
+        document.getElementById('quickLinksTitle').textContent = title;
+        const listContainer = document.getElementById('quickLinksList');
+        listContainer.innerHTML = '';
+        
+        if (!detailsList || detailsList.length === 0) {
+            listContainer.innerHTML = '<div class="p-3 text-muted text-center">No items available.</div>';
+        } else {
+            detailsList.forEach(item => {
+                listContainer.innerHTML += `
+                    <a href="/pm/projects/${item.id}" class="list-group-item list-group-item-action d-flex align-items-center gap-3 p-3 border rounded-3 text-decoration-none shadow-sm mb-2" style="background: var(--bg-card);">
+                        <div class="rounded-circle bg-primary bg-opacity-10 d-flex justify-content-center align-items-center" style="width: 40px; height: 40px;">
+                            <i class="fas fa-external-link-alt text-primary"></i>
+                        </div>
+                        <div>
+                            <h6 class="mb-0 fw-bold text-body">${item.name}</h6>
+                            <small class="text-muted">Click to view details</small>
+                        </div>
+                    </a>
+                `;
+            });
+        }
+        quickLinksModalObj.show();
+    }
+
+    // Helper for rich tooltips
+    function buildTooltip(detailsList, rawCount, itemType) {
+        if (!detailsList || detailsList.length === 0) return `0 ${itemType}`;
+        let lines = [`Total: ${rawCount}`];
+        let toShow = detailsList.slice(0, 10);
+        toShow.forEach(d => lines.push(`• ${d.name}`));
+        if (detailsList.length > 10) lines.push(`...and ${detailsList.length - 10} more`);
+        lines.push('');
+        lines.push('👉 Click this section for quick links');
+        return lines;
+    }
+
+    // 1. Project Status
+    new Chart(document.getElementById('chartProjectStatus'), {
+        type: 'doughnut',
+        data: {
+            labels: projectStatusData.labels,
+            datasets: [{
+                data: projectStatusData.values,
+                backgroundColor: ['#6c757d','#6366f1','#22c55e','#f59e0b'],
+                borderWidth: 0, hoverOffset: 8
+            }]
+        },
+        options: { 
+            responsive: true, cutout: '65%', 
+            onClick: (e, elements) => {
+                if (elements.length > 0) {
+                    const idx = elements[0].index;
+                    showQuickLinksModal(`Projects - ${projectStatusData.labels[idx]}`, projectStatusData.details[idx]);
+                }
+            },
+            plugins: { 
+                legend: { position: 'bottom', labels: { padding: 12, usePointStyle: true, pointStyleWidth: 10 } },
+                tooltip: {
+                    callbacks: {
+                        label: function(ctx) {
+                            return buildTooltip(projectStatusData.details[ctx.dataIndex], ctx.raw, 'Projects');
+                        }
+                    }
+                }
+            } 
+        }
+    });
+
+    // 2. Task Status
+    new Chart(document.getElementById('chartTaskStatus'), {
+        type: 'doughnut',
+        data: {
+            labels: taskStatusData.labels,
+            datasets: [{
+                data: taskStatusData.values,
+                backgroundColor: ['#f59e0b','#6366f1','#22c55e'],
+                borderWidth: 0, hoverOffset: 8
+            }]
+        },
+        options: { 
+            responsive: true, cutout: '65%', 
+            onClick: (e, elements) => {
+                if (elements.length > 0) {
+                    const idx = elements[0].index;
+                    showQuickLinksModal(`Tasks - ${taskStatusData.labels[idx]}`, taskStatusData.details[idx]);
+                }
+            },
+            plugins: { 
+                legend: { position: 'bottom', labels: { padding: 12, usePointStyle: true, pointStyleWidth: 10 } },
+                tooltip: {
+                    callbacks: {
+                        label: function(ctx) {
+                            return buildTooltip(taskStatusData.details[ctx.dataIndex], ctx.raw, 'Tasks');
+                        }
+                    }
+                }
+            } 
+        }
+    });
+
+    // 3. Task Priority
+    new Chart(document.getElementById('chartTaskPriority'), {
+        type: 'doughnut',
+        data: {
+            labels: priorityData.labels,
+            datasets: [{
+                data: priorityData.values,
+                backgroundColor: ['#22c55e','#f59e0b','#ef4444','#dc2626'],
+                borderWidth: 0, hoverOffset: 8
+            }]
+        },
+        options: { 
+            responsive: true, cutout: '65%', 
+            onClick: (e, elements) => {
+                if (elements.length > 0) {
+                    const idx = elements[0].index;
+                    showQuickLinksModal(`Tasks - ${priorityData.labels[idx]}`, priorityData.details[idx]);
+                }
+            },
+            plugins: { 
+                legend: { position: 'bottom', labels: { padding: 12, usePointStyle: true, pointStyleWidth: 10 } },
+                tooltip: {
+                    callbacks: {
+                        label: function(ctx) {
+                            return buildTooltip(priorityData.details[ctx.dataIndex], ctx.raw, 'Tasks');
+                        }
+                    }
+                }
+            } 
+        }
+    });
+
+    // 4. Hours Comparison
+    new Chart(document.getElementById('chartHoursComparison'), {
+        type: 'bar',
+        data: {
+            labels: hoursCompData.labels,
+            datasets: [
+                { label: 'Estimated', data: hoursCompData.estimated, backgroundColor: 'rgba(99,102,241,0.2)', borderColor: '#6366f1', borderWidth: 2, borderRadius: 6, maxBarThickness: 35 },
+                { label: 'Actual', data: hoursCompData.actual, backgroundColor: 'rgba(34,197,94,0.2)', borderColor: '#22c55e', borderWidth: 2, borderRadius: 6, maxBarThickness: 35 }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: { x: { grid: { display: false } }, y: { grid: { color: gridColor }, ticks: { callback: v => v + 'h' } } },
+            plugins: { legend: { position: 'top', labels: { usePointStyle: true, pointStyleWidth: 10 } }, tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + ctx.parsed.y + 'h' } } }
+        }
+    });
+
+    // 5. Employee Workload
+    new Chart(document.getElementById('chartEmployeeWorkload'), {
+        type: 'bar',
+        data: {
+            labels: empWorkloadData.labels,
+            datasets: [
+                { label: 'Pending', data: empWorkloadData.pending, backgroundColor: '#f59e0b', borderRadius: 4, maxBarThickness: 35 },
+                { label: 'In Progress', data: empWorkloadData.in_progress, backgroundColor: '#6366f1', borderRadius: 4, maxBarThickness: 35 },
+                { label: 'Done', data: empWorkloadData.done, backgroundColor: '#22c55e', borderRadius: 4, maxBarThickness: 35 }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            indexAxis: 'y',
+            scales: { x: { stacked: true, grid: { color: gridColor }, ticks: { stepSize: 1 } }, y: { stacked: true, grid: { display: false } } },
+            plugins: { legend: { position: 'top', labels: { usePointStyle: true, pointStyleWidth: 10, padding: 16 } } }
+        }
+    });
+
+    // 6. Employee Hours
+    new Chart(document.getElementById('chartEmployeeHours'), {
+        type: 'bar',
+        data: {
+            labels: empHoursData.labels,
+            datasets: [{
+                label: 'Approved Hours',
+                data: empHoursData.values,
+                backgroundColor: empHoursData.labels.map((_, i) => palette[i % palette.length]),
+                borderRadius: 6, maxBarThickness: 35
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            indexAxis: 'y',
+            scales: { x: { grid: { color: gridColor }, ticks: { callback: v => v + 'h' } }, y: { grid: { display: false } } },
+            plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.x + ' hours' } } }
+        }
+    });
+
+    // 7. Project Progress
+    new Chart(document.getElementById('chartProjectProgress'), {
+        type: 'bar',
+        data: {
+            labels: progressData.labels,
+            datasets: [{
+                label: 'Progress',
+                data: progressData.values,
+                backgroundColor: progressData.values.map(v => v === 100 ? '#22c55e' : v > 50 ? '#6366f1' : v > 0 ? '#f59e0b' : '#cbd5e1'),
+                borderRadius: 6, maxBarThickness: 35
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            indexAxis: 'y',
+            scales: { x: { max: 100, grid: { color: gridColor }, ticks: { callback: v => v + '%' } }, y: { grid: { display: false } } },
+            plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.x + '% complete' } } }
+        }
+    });
+
+    // 8. Department Distribution
+    new Chart(document.getElementById('chartDeptDistribution'), {
+        type: 'doughnut',
+        data: {
+            labels: deptData.labels,
+            datasets: [{
+                data: deptData.values,
+                backgroundColor: palette,
+                borderWidth: 0, hoverOffset: 8
+            }]
+        },
+        options: { responsive: true, cutout: '60%', plugins: { legend: { position: 'bottom', labels: { padding: 12, usePointStyle: true, pointStyleWidth: 10 } } } }
+    });
+
+    // 9. Daily Trend
+    new Chart(document.getElementById('chartDailyTrend'), {
+        type: 'line',
+        data: {
+            labels: dailyTrendData.labels,
+            datasets: [{
+                label: 'Total Hours',
+                data: dailyTrendData.values,
+                fill: true,
+                backgroundColor: 'rgba(99,102,241,0.08)',
+                borderColor: '#6366f1',
+                borderWidth: 2,
+                tension: 0.4,
+                pointBackgroundColor: '#6366f1',
+                pointBorderColor: '#fff',
+                pointBorderWidth: 2,
+                pointRadius: 3,
+                pointHoverRadius: 6
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } }, y: { grid: { color: gridColor }, beginAtZero: true, ticks: { callback: v => v + 'h' } } },
+            plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y + ' hours' } } }
+        }
+    });
+});
+</script>
+{% endblock %}

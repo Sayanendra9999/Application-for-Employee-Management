@@ -135,6 +135,9 @@
                         <i class="fas fa-diagram-project me-2"></i>PM Overview
                         <span class="badge bg-primary float-end">{{ total_projects }}</span>
                     </a>
+                    <a href="{{ url_for('admin.analytics') }}" class="btn btn-outline-success text-start fw-semibold">
+                        <i class="fas fa-chart-bar me-2"></i>Organization Analytics
+                    </a>
                     <a href="{{ url_for('admin.audit_logs') }}" class="btn btn-outline-secondary text-start">
                         <i class="fas fa-shield-halved me-2"></i>Audit Logs
                     </a>
