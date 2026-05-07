@@ -31,13 +31,29 @@
                 <p>Sign in to your workspace</p>
             </div>
 
+            <!-- SweetAlert2 for Warning Popups -->
+            <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
             {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}
                     {% for category, message in messages %}
-                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert" style="font-size:0.85rem;">
-                        {{ message }}
-                        <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="alert"></button>
-                    </div>
+                        {% if category in ['danger', 'warning'] %}
+                            <script>
+                                document.addEventListener('DOMContentLoaded', function() {
+                                    Swal.fire({
+                                        icon: '{{ "error" if category == "danger" else "warning" }}',
+                                        title: 'Authentication Alert',
+                                        text: '{{ message }}',
+                                        confirmButtonColor: '#2563eb',
+                                        confirmButtonText: 'Got it'
+                                    });
+                                });
+                            </script>
+                        {% else %}
+                            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert" style="font-size:0.85rem;">
+                                {{ message }}
+                                <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="alert"></button>
+                            </div>
+                        {% endif %}
                     {% endfor %}
                 {% endif %}
             {% endwith %}

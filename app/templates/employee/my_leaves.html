@@ -56,7 +56,7 @@
 <div class="data-card">
     <div class="table-responsive">
         <table class="table">
-            <thead><tr><th>Type</th><th>From</th><th>To</th><th>Days</th><th>Reason</th><th>Status</th><th>Approved By</th></tr></thead>
+            <thead><tr><th>Type</th><th>From</th><th>To</th><th>Days</th><th>Reason</th><th>Status</th><th>Approved By</th><th>Actions</th></tr></thead>
             <tbody>
                 {% for leave in leaves %}
                 <tr>
@@ -67,6 +67,15 @@
                     <td style="max-width:180px;">{{ leave.reason[:60] }}{% if leave.reason|length > 60 %}…{% endif %}</td>
                     <td><span class="badge-status badge-{{ leave.status|lower }}">{{ leave.status }}</span></td>
                     <td>{{ leave.approver.full_name if leave.approver else '—' }}</td>
+                    <td>
+                        {% if leave.status in ('Pending', 'Approved') %}
+                        <form method="POST" action="{{ url_for('employee.cancel_leave', leave_id=leave.id) }}" style="display:inline;" onsubmit="var r=prompt('Cancellation reason:'); if(r===null)return false; this.querySelector('[name=reason]').value=r;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="reason" value="">
+                            <button type="submit" class="btn btn-outline-danger btn-sm" title="Cancel Leave"><i class="fas fa-ban"></i></button>
+                        </form>
+                        {% endif %}
+                    </td>
                 </tr>
                 {% else %}
                 <tr><td colspan="7" class="text-center py-4" style="color:var(--text-secondary);">No leave requests found</td></tr>

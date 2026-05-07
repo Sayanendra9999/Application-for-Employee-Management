@@ -10,7 +10,7 @@ from flask_login import current_user
 from app.employee import bp
 from app.decorators import module_required
 from app.extensions import db
-from app.models import LeavePolicy, Shift
+from app.models import LeavePolicy, Shift, AttendanceRegularization, Holiday
 from app.employee import services
 from app.employee.utils import get_current_employee_or_abort, logger
 from app.employee.forms import (ProfileForm, ProfileUpdateRequestForm,
@@ -249,9 +249,50 @@ def request_leave():
 def payslips():
     """View salary records / payslips."""
     employee = get_current_employee_or_abort()
-    records = services.get_my_salary_records(employee.id)
+    year_filter = request.args.get('year', '')
+    month_filter = request.args.getlist('month')
+    
+    # Remove empty string if 'All Months' or empty option was submitted
+    month_filter = [m for m in month_filter if m]
+    
+    records = services.get_my_salary_records(employee.id, year=year_filter or None, month=month_filter or None)
     return render_template('employee/payslips.html',
-                           records=records, employee=employee)
+                           records=records, employee=employee,
+                           selected_year=year_filter,
+                           selected_month=month_filter)
+
+@bp.route('/payslips/export')
+@module_required('employee')
+def export_payslips():
+    """Export yearly payslips as CSV."""
+    import csv
+    from io import StringIO
+    from flask import Response
+    
+    employee = get_current_employee_or_abort()
+    year = request.args.get('year')
+    if not year:
+        flash('Year is required to export payslips.', 'danger')
+        return redirect(url_for('employee.payslips'))
+        
+    records = services.get_my_salary_records(employee.id, year=year)
+    
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Month', 'Year', 'Basic', 'HRA', 'Deductions', 'Net Salary', 'Status'])
+    
+    for r in records:
+        writer.writerow([
+            r.month, r.year, 
+            r.basic, r.hra, r.deductions, 
+            r.net_salary, r.status
+        ])
+        
+    return Response(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': f'attachment; filename=payslips_{year}.csv'}
+    )
 
 
 @bp.route('/payslips/<int:record_id>')
@@ -706,3 +747,159 @@ def analytics():
                            projects_data=projects_data)
 
 
+# ===========================================================================
+# LEAVE CANCELLATION (Employee-Side)
+# ===========================================================================
+@bp.route('/leaves/<int:leave_id>/cancel', methods=['POST'])
+@module_required('employee')
+def cancel_leave(leave_id):
+    """Employee cancels their own pending or approved leave."""
+    employee = get_current_employee_or_abort()
+    from app.models import Leave
+    leave = Leave.query.filter_by(id=leave_id, employee_id=employee.id).first()
+
+    if not leave:
+        flash('Leave not found.', 'danger')
+        return redirect(url_for('employee.my_leaves'))
+
+    if leave.status not in ('Pending', 'Approved'):
+        flash(f'Cannot cancel — leave is already {leave.status}.', 'danger')
+        return redirect(url_for('employee.my_leaves'))
+
+    cancel_reason = request.form.get('reason', 'Cancelled by employee').strip()
+
+    # If leave was approved, restore leave balance
+    if leave.status == 'Approved' and leave.total_days:
+        from app.models import LeaveBalance
+        from datetime import date as date_cls
+        balance = LeaveBalance.query.filter_by(
+            employee_id=employee.id,
+            leave_type=leave.leave_type,
+            year=leave.start_date.year
+        ).first()
+        if balance:
+            balance.used = max(0, balance.used - leave.total_days)
+
+    from datetime import datetime as dt
+    leave.status = 'Cancelled'
+    leave.cancelled_at = dt.utcnow()
+    leave.cancelled_reason = cancel_reason
+
+    from app.employee.utils import log_employee_action, create_notification
+    log_employee_action('CANCEL', 'Leave', leave.id,
+                       f'Cancelled {leave.leave_type}: {leave.start_date} to {leave.end_date}',
+                       request.remote_addr or '')
+
+    # Notify HR about the cancellation
+    from app.models import Module
+    hr_module = Module.query.filter_by(slug='hr').first()
+    if hr_module:
+        for hr_user in hr_module.users:
+            create_notification(
+                hr_user.id,
+                'Leave Cancelled by Employee',
+                f'{employee.user.full_name} cancelled their {leave.leave_type} leave ({leave.start_date} to {leave.end_date})',
+                category='info',
+                link='/hr/leaves'
+            )
+
+    db.session.commit()
+    flash(f'Leave cancelled successfully. Balance restored.', 'success')
+    return redirect(url_for('employee.my_leaves'))
+
+
+# ===========================================================================
+# ATTENDANCE REGULARIZATION REQUEST (Employee-Side)
+# ===========================================================================
+@bp.route('/attendance/regularization', methods=['GET', 'POST'])
+@module_required('employee')
+def attendance_regularization():
+    """Submit an attendance regularization request."""
+    employee = get_current_employee_or_abort()
+
+    if request.method == 'POST':
+        date_str = request.form.get('date', '').strip()
+        check_in = request.form.get('check_in', '').strip()
+        check_out = request.form.get('check_out', '').strip()
+        reason = request.form.get('reason', '').strip()
+
+        if not date_str or not reason:
+            flash('Date and reason are required.', 'danger')
+            return redirect(url_for('employee.attendance_regularization'))
+
+        from datetime import datetime as dt, date as date_cls
+        try:
+            reg_date = dt.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            flash('Invalid date format.', 'danger')
+            return redirect(url_for('employee.attendance_regularization'))
+
+        # Cannot request for future dates
+        if reg_date > date_cls.today():
+            flash('Cannot request regularization for future dates.', 'danger')
+            return redirect(url_for('employee.attendance_regularization'))
+
+        # Check for existing pending request for same date
+        existing = AttendanceRegularization.query.filter_by(
+            employee_id=employee.id, date=reg_date, status='Pending'
+        ).first()
+        if existing:
+            flash('A pending regularization request already exists for this date.', 'warning')
+            return redirect(url_for('employee.attendance_regularization'))
+
+        reg = AttendanceRegularization(
+            employee_id=employee.id,
+            date=reg_date,
+            requested_check_in=check_in,
+            requested_check_out=check_out,
+            reason=reason,
+            status='Pending'
+        )
+        db.session.add(reg)
+
+        from app.employee.utils import log_employee_action, create_notification
+        log_employee_action('SUBMIT', 'AttendanceRegularization', None,
+                          f'Regularization for {reg_date}', request.remote_addr or '')
+
+        # Notify HR
+        from app.models import Module
+        hr_module = Module.query.filter_by(slug='hr').first()
+        if hr_module:
+            for hr_user in hr_module.users:
+                create_notification(
+                    hr_user.id,
+                    'Attendance Regularization Request',
+                    f'{employee.user.full_name} requested attendance regularization for {reg_date}',
+                    category='info',
+                    link='/hr/attendance-regularizations'
+                )
+
+        db.session.commit()
+        flash('Attendance regularization request submitted.', 'success')
+        return redirect(url_for('employee.attendance'))
+
+    # GET: show form with past regularization requests
+    my_regs = AttendanceRegularization.query.filter_by(
+        employee_id=employee.id
+    ).order_by(AttendanceRegularization.created_at.desc()).limit(20).all()
+
+    return render_template('employee/attendance_regularization.html',
+                           employee=employee, regularizations=my_regs)
+
+
+# ===========================================================================
+# HOLIDAY CALENDAR (Employee view — read-only)
+# ===========================================================================
+@bp.route('/holidays')
+@module_required('employee')
+def holiday_calendar():
+    """View the company holiday calendar."""
+    from datetime import date as date_cls
+    year = request.args.get('year', date_cls.today().year, type=int)
+    holidays = Holiday.query.filter(
+        db.extract('year', Holiday.date) == year,
+        Holiday.is_active == True
+    ).order_by(Holiday.date).all()
+
+    return render_template('employee/holiday_calendar.html',
+                           holidays=holidays, year=year)

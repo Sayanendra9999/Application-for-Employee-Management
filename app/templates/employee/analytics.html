@@ -201,7 +201,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const dailyHoursData = {{ daily_hours_data | tojson }};
     
     // Theme configs
-    const isDark = document.documentElement.getAttribute('data-theme') === 'dark' || window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     Chart.defaults.color = isDark ? '#cbd5e1' : '#475569';
     Chart.defaults.font.family = "'Inter', sans-serif";
     const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
@@ -279,6 +279,43 @@ document.addEventListener('DOMContentLoaded', function() {
 
         drillDownSec.style.display = 'none';
 
+        const strongTextColor = isDark ? '#f8fafc' : '#1e293b';
+
+        const doughnutLegendConfig = {
+            position: 'bottom',
+            labels: {
+                padding: 16,
+                usePointStyle: true,
+                pointStyleWidth: 14,
+                color: strongTextColor,
+                font: {
+                    size: 13,
+                    weight: 'bold'
+                },
+                generateLabels: function(chart) {
+                    const data = chart.data;
+                    if (data.labels.length && data.datasets.length) {
+                        const dataset = data.datasets[0];
+                        const total = dataset.data.reduce((acc, val) => acc + val, 0);
+                        return data.labels.map((label, i) => {
+                            const value = dataset.data[i];
+                            const percentage = total > 0 ? Math.round((value / total) * 100) + '%' : '0%';
+                            const meta = chart.getDatasetMeta(0);
+                            return {
+                                text: `${label} (${percentage})`,
+                                fillStyle: Array.isArray(dataset.backgroundColor) ? dataset.backgroundColor[i] : dataset.backgroundColor,
+                                strokeStyle: Array.isArray(dataset.borderColor) ? dataset.borderColor[i] : dataset.borderColor || 'transparent',
+                                lineWidth: dataset.borderWidth || 0,
+                                hidden: isNaN(dataset.data[i]) || meta.data[i].hidden,
+                                index: i
+                            };
+                        });
+                    }
+                    return [];
+                }
+            }
+        };
+
         // 1. My Task Status Doughnut
         if (chartMyTaskStatus) chartMyTaskStatus.destroy();
         chartMyTaskStatus = new Chart(document.getElementById('chartMyTaskStatus'), {
@@ -296,7 +333,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 responsive: true,
                 cutout: '65%',
                 plugins: {
-                    legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true, pointStyleWidth: 10 } }
+                    legend: doughnutLegendConfig
                 }
             }
         });

@@ -6,7 +6,7 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
         <h4 style="font-weight:700;">Leave Requests</h4>
-        <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">{{ leaves | length }} requests — Multi-step approval (Manager → HR)</p>
+        <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">{{ leaves.total }} requests — Multi-step approval (Manager → HR)</p>
     </div>
     <a href="{{ url_for('hr.leave_balances') }}" class="btn btn-outline-primary btn-sm">
         <i class="fas fa-scale-balanced me-1"></i>View Balances
@@ -47,7 +47,7 @@
                 </tr>
             </thead>
             <tbody>
-                {% for leave in leaves %}
+                {% for leave in leaves.items %}
                 <tr>
                     <td class="fw-semibold">
                         {{ leave.employee.user.full_name }}
@@ -114,6 +114,16 @@
                             {% if leave.approver %}by {{ leave.approver.full_name }}{% endif %}
                         </span>
                         {% endif %}
+                        
+                        {% if leave.status in ('Pending', 'Approved') %}
+                        <form method="POST" action="{{ url_for('hr.cancel_leave', leave_id=leave.id) }}" class="d-inline mt-1" onsubmit="var r=prompt('Cancellation reason (optional):'); if(r===null)return false; this.querySelector('[name=reason]').value=r;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="reason" value="Cancelled by HR">
+                            <button type="submit" class="btn btn-outline-danger btn-sm" title="Cancel Leave" style="padding: 2px 6px; font-size: 0.7rem;">
+                                <i class="fas fa-ban"></i> Cancel
+                            </button>
+                        </form>
+                        {% endif %}
                     </td>
                 </tr>
                 {% else %}
@@ -123,4 +133,7 @@
         </table>
     </div>
 </div>
+{% with pagination=leaves %}
+    {% include 'includes/pagination.html' %}
+{% endwith %}
 {% endblock %}

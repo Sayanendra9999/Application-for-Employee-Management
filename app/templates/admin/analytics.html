@@ -217,8 +217,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const isDark = document.documentElement.getAttribute('data-theme') === 'dark' ||
-                   window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     const textColor = isDark ? '#cbd5e1' : '#475569';
     const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
     Chart.defaults.color = textColor;
@@ -265,6 +264,43 @@ document.addEventListener('DOMContentLoaded', function() {
         quickLinksModalObj.show();
     }
 
+    const strongTextColor = isDark ? '#f8fafc' : '#1e293b';
+
+    const doughnutLegendConfig = {
+        position: 'bottom',
+        labels: {
+            padding: 16,
+            usePointStyle: true,
+            pointStyleWidth: 14,
+            color: strongTextColor,
+            font: {
+                size: 13,
+                weight: 'bold'
+            },
+            generateLabels: function(chart) {
+                const data = chart.data;
+                if (data.labels.length && data.datasets.length) {
+                    const dataset = data.datasets[0];
+                    const total = dataset.data.reduce((acc, val) => acc + val, 0);
+                    return data.labels.map((label, i) => {
+                        const value = dataset.data[i];
+                        const percentage = total > 0 ? Math.round((value / total) * 100) + '%' : '0%';
+                        const meta = chart.getDatasetMeta(0);
+                        return {
+                            text: `${label} (${percentage})`,
+                            fillStyle: Array.isArray(dataset.backgroundColor) ? dataset.backgroundColor[i] : dataset.backgroundColor,
+                            strokeStyle: Array.isArray(dataset.borderColor) ? dataset.borderColor[i] : dataset.borderColor || 'transparent',
+                            lineWidth: dataset.borderWidth || 0,
+                            hidden: isNaN(dataset.data[i]) || meta.data[i].hidden,
+                            index: i
+                        };
+                    });
+                }
+                return [];
+            }
+        }
+    };
+
     // Helper for rich tooltips
     function buildTooltip(detailsList, rawCount, itemType) {
         if (!detailsList || detailsList.length === 0) return `0 ${itemType}`;
@@ -297,7 +333,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             },
             plugins: { 
-                legend: { position: 'bottom', labels: { padding: 12, usePointStyle: true, pointStyleWidth: 10 } },
+                legend: doughnutLegendConfig,
                 tooltip: {
                     callbacks: {
                         label: function(ctx) {
@@ -329,7 +365,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             },
             plugins: { 
-                legend: { position: 'bottom', labels: { padding: 12, usePointStyle: true, pointStyleWidth: 10 } },
+                legend: doughnutLegendConfig,
                 tooltip: {
                     callbacks: {
                         label: function(ctx) {
@@ -361,7 +397,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             },
             plugins: { 
-                legend: { position: 'bottom', labels: { padding: 12, usePointStyle: true, pointStyleWidth: 10 } },
+                legend: doughnutLegendConfig,
                 tooltip: {
                     callbacks: {
                         label: function(ctx) {
@@ -460,7 +496,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 borderWidth: 0, hoverOffset: 8
             }]
         },
-        options: { responsive: true, cutout: '60%', plugins: { legend: { position: 'bottom', labels: { padding: 12, usePointStyle: true, pointStyleWidth: 10 } } } }
+        options: { responsive: true, cutout: '60%', plugins: { legend: doughnutLegendConfig } }
     });
 
     // 9. Daily Trend

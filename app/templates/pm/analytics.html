@@ -102,7 +102,7 @@
                 <div style="flex:1; min-width:200px;">
                     <label class="form-label text-secondary fw-semibold small mb-1">Project Status</label>
                     <select id="filterStatus" class="form-select">
-                        <option value="all">All Statuses</option>
+                        <option value="all">All Status</option>
                         <option value="Completed">Completed</option>
                         <option value="In Progress">In Progress</option>
                         <option value="Not Started">Not Started</option>
@@ -193,7 +193,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const rawData = {{ projects_data | tojson }};
     
     // Theme configs
-    const isDark = document.documentElement.getAttribute('data-theme') === 'dark' || window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     Chart.defaults.color = isDark ? '#cbd5e1' : '#475569';
     Chart.defaults.font.family = "'Inter', sans-serif";
     const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';

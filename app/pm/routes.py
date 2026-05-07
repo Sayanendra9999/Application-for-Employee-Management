@@ -811,17 +811,20 @@ def timesheet_approvals():
     if project_filter:
         query = query.filter(Timesheet.project_id == project_filter)
 
-    timesheets = query.order_by(Timesheet.date.desc()).all()
+    page = request.args.get('page', 1, type=int)
+    timesheets = query.order_by(Timesheet.date.desc()).paginate(page=page, per_page=25, error_out=False)
 
     # Stats for visible projects
-    all_ts = Timesheet.query.filter(Timesheet.project_id.in_(visible_ids)).all() if visible_ids else []
-    stats = {
-        'total': len(all_ts),
-        'pending': sum(1 for t in all_ts if t.status == 'Pending'),
-        'approved': sum(1 for t in all_ts if t.status == 'Approved'),
-        'rejected': sum(1 for t in all_ts if t.status == 'Rejected'),
-        'total_hours': round(sum(t.hours_worked for t in all_ts if t.status == 'Approved'), 2),
-    }
+    if visible_ids:
+        stats = {
+            'total': Timesheet.query.filter(Timesheet.project_id.in_(visible_ids)).count(),
+            'pending': Timesheet.query.filter(Timesheet.project_id.in_(visible_ids), Timesheet.status == 'Pending').count(),
+            'approved': Timesheet.query.filter(Timesheet.project_id.in_(visible_ids), Timesheet.status == 'Approved').count(),
+            'rejected': Timesheet.query.filter(Timesheet.project_id.in_(visible_ids), Timesheet.status == 'Rejected').count(),
+            'total_hours': round(db.session.query(db.func.coalesce(db.func.sum(Timesheet.hours_worked), 0)).filter(Timesheet.project_id.in_(visible_ids), Timesheet.status == 'Approved').scalar(), 2),
+        }
+    else:
+        stats = {'total': 0, 'pending': 0, 'approved': 0, 'rejected': 0, 'total_hours': 0}
 
     return render_template('pm/timesheet_approvals.html',
                            timesheets=timesheets,

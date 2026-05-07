@@ -9,7 +9,7 @@
     </a>
 </div>
 <div class="form-card">
-    <form method="POST" novalidate>
+    <form method="POST" enctype="multipart/form-data" novalidate>
         {{ form.hidden_tag() }}
         <div class="row g-3">
             <div class="col-md-6">
@@ -27,6 +27,13 @@
             <div class="col-md-6">
                 {{ form.status.label(class="form-label") }}
                 {{ form.status(class="form-select") }}
+            </div>
+            <div class="col-md-12">
+                <label class="form-label fw-semibold">Resume Document</label>
+                <input type="file" name="resume" class="form-control" accept=".pdf,.doc,.docx">
+                {% if candidate and candidate.resume_file %}
+                <small class="text-muted d-block mt-1">Current: <a href="{{ url_for('hr.download_resume', candidate_id=candidate.id) }}" target="_blank">Download <i class="fas fa-external-link-alt"></i></a></small>
+                {% endif %}
             </div>
             <div class="col-md-12">
                 {{ form.notes.label(class="form-label") }}

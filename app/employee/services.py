@@ -239,12 +239,18 @@ def submit_leave_request(employee, leave_type, start_date, end_date, reason='', 
 # ===========================================================================
 # PAYSLIP SERVICES (Read-only from Finance)
 # ===========================================================================
-def get_my_salary_records(employee_id):
+def get_my_salary_records(employee_id, year=None, month=None):
     """Get all salary records for the employee."""
     try:
-        return SalaryRecord.query.filter_by(
-            employee_id=employee_id
-        ).order_by(SalaryRecord.year.desc(), SalaryRecord.month.desc()).all()
+        query = SalaryRecord.query.filter_by(employee_id=employee_id)
+        if year:
+            query = query.filter_by(year=int(year))
+        if month:
+            if isinstance(month, list):
+                query = query.filter(SalaryRecord.month.in_(month))
+            else:
+                query = query.filter_by(month=month)
+        return query.order_by(SalaryRecord.year.desc(), SalaryRecord.month.desc()).all()
     except Exception as e:
         logger.error(f'Error fetching salary records: {e}')
         return []

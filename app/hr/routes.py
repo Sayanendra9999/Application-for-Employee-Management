@@ -16,7 +16,9 @@ from app.models import (Employee, User, Leave, Attendance, LeaveBalance,
                         LeavePolicy, Department, Designation,
                         PerformanceReview, PayrollInput, EmployeeDocument,
                         JobPosting, Candidate, Interview,
-                        Shift, CompOff, ShiftSwapRequest, Timesheet)
+                        Shift, CompOff, ShiftSwapRequest, Timesheet,
+                        ProfileUpdateRequest, AttendanceRegularization,
+                        Notification, Holiday)
 from app.hr.forms import (EmployeeForm, LeaveActionForm, CheckInOutForm,
                           AttendanceFilterForm, AttendanceOverrideForm,
                           PerformanceReviewForm,
@@ -104,13 +106,22 @@ def employees():
             )
         )
 
-    all_employees = query.order_by(Employee.emp_code).all()
+    is_complete_condition = db.and_(
+        Employee.department_id.isnot(None),
+        Employee.designation_id.isnot(None),
+        Employee.salary > 0,
+        db.func.coalesce(Employee.bank_account, '') != '',
+        db.func.coalesce(Employee.pan_number, '') != '',
+        db.func.coalesce(User.phone, '') != ''
+    )
 
-    # Apply status filter in-memory (no schema change)
     if status_filter == 'unassigned':
-        all_employees = [e for e in all_employees if not services.is_employee_profile_complete(e)]
+        query = query.filter(db.not_(is_complete_condition))
     elif status_filter == 'assigned':
-        all_employees = [e for e in all_employees if services.is_employee_profile_complete(e)]
+        query = query.filter(is_complete_condition)
+
+    page = request.args.get('page', 1, type=int)
+    all_employees = query.order_by(Employee.emp_code).paginate(page=page, per_page=25, error_out=False)
 
     departments = Department.query.filter_by(is_active=True).order_by(Department.name).all()
     unassigned_count = services.get_unassigned_count()
@@ -217,6 +228,8 @@ def complete_profile(emp_id):
             salary=form.salary.data,
             bank_account=form.bank_account.data,
             pan_number=form.pan_number.data,
+            phone=request.form.get('phone', '').strip(),
+            country_code=request.form.get('country_code', '+91'),
             date_of_joining=form.date_of_joining.data
         )
         if success:
@@ -282,8 +295,8 @@ def api_attendance():
         results.append({
             'emp_code': emp.emp_code,
             'full_name': emp.user.full_name,
-            'check_in': rec.check_in.strftime('%H:%M:%S') if rec and rec.check_in else '—',
-            'check_out': rec.check_out.strftime('%H:%M:%S') if rec and rec.check_out else '—',
+            'check_in': str(rec.check_in) if rec and rec.check_in else '—',
+            'check_out': str(rec.check_out) if rec and rec.check_out else '—',
             'working_hours': f'{rec.working_hours:.1f}h' if rec and rec.working_hours else '—',
             'status': rec.status if rec else 'Not Recorded'
         })
@@ -295,12 +308,20 @@ def api_attendance():
 @module_required('hr')
 def attendance():
     # Filters
+    emp_search = request.args.get('employee_id', '').strip()
     dept_id = request.args.get('department', type=int)
     status_filter = request.args.get('status', '')
     date_from = request.args.get('date_from', '')
     date_to = request.args.get('date_to', '')
 
-    query = Attendance.query.join(Employee)
+    query = Attendance.query.join(Employee).join(User)
+    if emp_search:
+        query = query.filter(
+            db.or_(
+                Employee.emp_code.ilike(f'%{emp_search}%'),
+                User.full_name.ilike(f'%{emp_search}%')
+            )
+        )
     if dept_id:
         query = query.filter(Employee.department_id == dept_id)
     if status_filter:
@@ -316,14 +337,16 @@ def attendance():
         except ValueError:
             pass
 
-    records = query.order_by(Attendance.date.desc()).limit(200).all()
+    page = request.args.get('page', 1, type=int)
+    records = query.order_by(Attendance.date.desc()).paginate(page=page, per_page=25, error_out=False)
     departments = Department.query.filter_by(is_active=True).order_by(Department.name).all()
     rules = services.get_attendance_rules()
 
     return render_template('hr/attendance.html', records=records,
                            departments=departments, rules=rules,
                            selected_dept=dept_id, selected_status=status_filter,
-                           date_from=date_from, date_to=date_to)
+                           date_from=date_from, date_to=date_to,
+                           emp_search=emp_search)
 
 
 @bp.route('/attendance/check-in', methods=['GET', 'POST'])
@@ -367,8 +390,18 @@ def attendance_report():
     """Monthly attendance summary report."""
     year = request.args.get('year', date.today().year, type=int)
     month = request.args.get('month', date.today().month, type=int)
+    emp_search = request.args.get('employee_id', '').strip()
 
-    employees = Employee.query.order_by(Employee.emp_code).all()
+    query = Employee.query.join(User)
+    if emp_search:
+        query = query.filter(
+            db.or_(
+                Employee.emp_code.ilike(f'%{emp_search}%'),
+                User.full_name.ilike(f'%{emp_search}%')
+            )
+        )
+    employees = query.order_by(Employee.emp_code).all()
+
     report = []
     for emp in employees:
         summary = services.get_attendance_summary(emp.id, year, month)
@@ -376,7 +409,118 @@ def attendance_report():
         report.append(summary)
 
     return render_template('hr/attendance_report.html', report=report,
-                           year=year, month=month)
+                           year=year, month=month, emp_search=emp_search)
+
+
+@bp.route('/attendance/export')
+@module_required('hr')
+def export_attendance():
+    """Export day-wise attendance as CSV."""
+    import csv
+    import io
+    from flask import Response
+
+    emp_search = request.args.get('employee_id', '').strip()
+    dept_id = request.args.get('department', type=int)
+    status_filter = request.args.get('status', '')
+    date_from = request.args.get('date_from', '')
+    date_to = request.args.get('date_to', '')
+
+    query = Attendance.query.join(Employee).join(User)
+    if emp_search:
+        query = query.filter(
+            db.or_(
+                Employee.emp_code.ilike(f'%{emp_search}%'),
+                User.full_name.ilike(f'%{emp_search}%')
+            )
+        )
+    if dept_id:
+        query = query.filter(Employee.department_id == dept_id)
+    if status_filter:
+        query = query.filter(Attendance.status == status_filter)
+    if date_from:
+        try:
+            query = query.filter(Attendance.date >= datetime.strptime(date_from, '%Y-%m-%d').date())
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            query = query.filter(Attendance.date <= datetime.strptime(date_to, '%Y-%m-%d').date())
+        except ValueError:
+            pass
+
+    records = query.order_by(Attendance.date.desc()).all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Employee ID', 'Employee Name', 'Department', 'Date', 'Check-In', 'Check-Out', 'Working Hours', 'Status'])
+
+    for r in records:
+        writer.writerow([
+            r.employee.emp_code,
+            r.employee.user.full_name,
+            r.employee.department_name,
+            r.date.strftime('%d %b %Y'),
+            str(r.check_in) if r.check_in else '',
+            str(r.check_out) if r.check_out else '',
+            r.working_hours or 0,
+            r.status
+        ])
+
+    return Response(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment; filename=attendance_export.csv'}
+    )
+
+
+@bp.route('/attendance/report/export')
+@module_required('hr')
+def export_attendance_report():
+    """Export month-wise attendance report as CSV."""
+    import csv
+    import io
+    from flask import Response
+
+    year = request.args.get('year', date.today().year, type=int)
+    month = request.args.get('month', date.today().month, type=int)
+    emp_search = request.args.get('employee_id', '').strip()
+
+    query = Employee.query.join(User)
+    if emp_search:
+        query = query.filter(
+            db.or_(
+                Employee.emp_code.ilike(f'%{emp_search}%'),
+                User.full_name.ilike(f'%{emp_search}%')
+            )
+        )
+    employees = query.order_by(Employee.emp_code).all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Employee ID', 'Employee Name', 'Department', 'Month', 'Year', 'Present', 'Late', 'Absent', 'Half-Day', 'Total Hours', 'Effective Days'])
+
+    for emp in employees:
+        summary = services.get_attendance_summary(emp.id, year, month)
+        writer.writerow([
+            emp.emp_code,
+            emp.user.full_name,
+            emp.department_name,
+            month,
+            year,
+            summary['present'],
+            summary['late'],
+            summary['absent'],
+            summary['half_day'],
+            summary['total_hours'],
+            summary['effective_days']
+        ])
+
+    return Response(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': f'attachment; filename=attendance_report_{year}_{month}.csv'}
+    )
 
 
 # ===========================================================================
@@ -389,7 +533,8 @@ def leaves():
     query = Leave.query
     if status_filter:
         query = query.filter_by(status=status_filter)
-    all_leaves = query.order_by(Leave.created_at.desc()).all()
+    page = request.args.get('page', 1, type=int)
+    all_leaves = query.order_by(Leave.created_at.desc()).paginate(page=page, per_page=25, error_out=False)
     return render_template('hr/leaves.html', leaves=all_leaves,
                            selected_status=status_filter)
 
@@ -589,13 +734,27 @@ def add_candidate(job_id):
     form = CandidateForm()
 
     if form.validate_on_submit():
+        # Handle resume upload
+        resume_filename = ''
+        if 'resume' in request.files:
+            file = request.files['resume']
+            if file and file.filename:
+                upload_folder = current_app.config.get('UPLOAD_FOLDER', 'static/uploads/documents')
+                os.makedirs(upload_folder, exist_ok=True)
+                import uuid
+                ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else 'pdf'
+                safe_name = f"resume_{uuid.uuid4().hex[:8]}.{ext}"
+                file.save(os.path.join(upload_folder, safe_name))
+                resume_filename = safe_name
+
         candidate = Candidate(
             job_id=job.id,
             name=form.name.data,
             email=form.email.data,
             phone=form.phone.data or '',
             status=form.status.data,
-            notes=form.notes.data or ''
+            notes=form.notes.data or '',
+            resume_file=resume_filename
         )
         db.session.add(candidate)
         services.log_audit(current_user.id, 'CREATE', 'Candidate', None,
@@ -619,6 +778,19 @@ def edit_candidate(candidate_id):
         candidate.phone = form.phone.data or ''
         candidate.status = form.status.data
         candidate.notes = form.notes.data or ''
+
+        # Handle resume upload on edit
+        if 'resume' in request.files:
+            file = request.files['resume']
+            if file and file.filename:
+                upload_folder = current_app.config.get('UPLOAD_FOLDER', 'static/uploads/documents')
+                os.makedirs(upload_folder, exist_ok=True)
+                import uuid
+                ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else 'pdf'
+                safe_name = f"resume_{uuid.uuid4().hex[:8]}.{ext}"
+                file.save(os.path.join(upload_folder, safe_name))
+                candidate.resume_file = safe_name
+
         services.log_audit(current_user.id, 'UPDATE', 'Candidate', candidate.id,
                           f'Status: {old_status} → {candidate.status}', request.remote_addr or '')
         db.session.commit()
@@ -1014,12 +1186,13 @@ def timesheets():
         except ValueError:
             pass
 
-    records = query.order_by(Timesheet.date.desc()).limit(300).all()
+    page = request.args.get('page', 1, type=int)
+    records = query.order_by(Timesheet.date.desc()).paginate(page=page, per_page=25, error_out=False)
     departments = Department.query.filter_by(is_active=True).order_by(Department.name).all()
 
-    # Summary stats
-    total_hours = sum(r.hours_worked for r in records)
-    approved_hours = sum(r.hours_worked for r in records if r.status == 'Approved')
+    # Summary stats without pagination
+    total_hours = db.session.query(db.func.coalesce(db.func.sum(Timesheet.hours_worked), 0)).filter(query.whereclause).scalar() if query.whereclause is not None else db.session.query(db.func.coalesce(db.func.sum(Timesheet.hours_worked), 0)).scalar()
+    approved_hours = db.session.query(db.func.coalesce(db.func.sum(Timesheet.hours_worked), 0)).filter(query.whereclause, Timesheet.status == 'Approved').scalar() if query.whereclause is not None else db.session.query(db.func.coalesce(db.func.sum(Timesheet.hours_worked), 0)).filter(Timesheet.status == 'Approved').scalar()
 
     return render_template('hr/timesheets.html', records=records,
                            departments=departments,
@@ -1217,3 +1390,239 @@ def analytics():
                            progress_data=progress_data,
                            dept_distribution_data=dept_data,
                            daily_trend_data=daily_trend_data)
+
+
+# ===========================================================================
+# PROFILE UPDATE APPROVALS (HR-Side)
+# ===========================================================================
+@bp.route('/profile-update-requests')
+@module_required('hr')
+def profile_update_requests():
+    """View all profile update requests from employees."""
+    status_filter = request.args.get('status', '')
+    query = ProfileUpdateRequest.query
+    if status_filter:
+        query = query.filter_by(status=status_filter)
+    requests_list = query.order_by(ProfileUpdateRequest.created_at.desc()).all()
+    return render_template('hr/profile_update_requests.html',
+                           requests=requests_list,
+                           selected_status=status_filter)
+
+
+@bp.route('/profile-update-requests/<int:req_id>/approve', methods=['POST'])
+@module_required('hr')
+def approve_profile_update(req_id):
+    """Approve a profile update request and apply changes."""
+    req_obj = ProfileUpdateRequest.query.get_or_404(req_id)
+    if req_obj.status != 'Pending':
+        flash('This request has already been processed.', 'warning')
+        return redirect(url_for('hr.profile_update_requests'))
+
+    # Apply the change to employee's profile
+    emp = Employee.query.get(req_obj.employee_id)
+    if not emp:
+        flash('Employee not found.', 'danger')
+        return redirect(url_for('hr.profile_update_requests'))
+
+    field_name = req_obj.field_name
+    new_value = req_obj.new_value
+
+    if field_name == 'phone':
+        emp.user.phone = new_value
+    elif field_name == 'bank_account':
+        emp.bank_account = new_value
+    elif field_name == 'pan_number':
+        emp.pan_number = new_value.upper()
+
+    req_obj.status = 'Approved'
+    req_obj.reviewed_by = current_user.id
+    req_obj.reviewed_at = datetime.utcnow()
+    services.log_audit(current_user.id, 'APPROVE', 'ProfileUpdateRequest', req_obj.id,
+                      f'Approved {field_name} update for emp#{emp.id}', request.remote_addr or '')
+
+    # Notify employee
+    notif = Notification(
+        user_id=emp.user_id,
+        title='Profile Update Approved',
+        message=f'Your request to update {field_name} has been approved.',
+        category='success',
+        link='/employee/profile'
+    )
+    db.session.add(notif)
+    db.session.commit()
+    flash(f'Profile update for {emp.user.full_name} ({field_name}) approved and applied.', 'success')
+    return redirect(url_for('hr.profile_update_requests'))
+
+
+@bp.route('/profile-update-requests/<int:req_id>/reject', methods=['POST'])
+@module_required('hr')
+def reject_profile_update(req_id):
+    """Reject a profile update request."""
+    req_obj = ProfileUpdateRequest.query.get_or_404(req_id)
+    if req_obj.status != 'Pending':
+        flash('This request has already been processed.', 'warning')
+        return redirect(url_for('hr.profile_update_requests'))
+
+    rejection_reason = request.form.get('reason', '').strip()
+    req_obj.status = 'Rejected'
+    req_obj.reviewed_by = current_user.id
+    req_obj.reviewed_at = datetime.utcnow()
+    req_obj.rejection_reason = rejection_reason
+    services.log_audit(current_user.id, 'REJECT', 'ProfileUpdateRequest', req_obj.id,
+                      f'Rejected {req_obj.field_name} update', request.remote_addr or '')
+
+    emp = Employee.query.get(req_obj.employee_id)
+    if emp:
+        notif = Notification(
+            user_id=emp.user_id,
+            title='Profile Update Rejected',
+            message=f'Your request to update {req_obj.field_name} was rejected. {rejection_reason}',
+            category='warning',
+            link='/employee/profile'
+        )
+        db.session.add(notif)
+
+    db.session.commit()
+    flash('Profile update request rejected.', 'warning')
+    return redirect(url_for('hr.profile_update_requests'))
+
+
+# ===========================================================================
+# ATTENDANCE REGULARIZATION APPROVALS (HR-Side)
+# ===========================================================================
+@bp.route('/attendance-regularizations')
+@module_required('hr')
+def attendance_regularizations():
+    """View all attendance regularization requests."""
+    status_filter = request.args.get('status', '')
+    query = AttendanceRegularization.query
+    if status_filter:
+        query = query.filter_by(status=status_filter)
+    reqs = query.order_by(AttendanceRegularization.created_at.desc()).all()
+    return render_template('hr/attendance_regularizations.html',
+                           regularizations=reqs,
+                           selected_status=status_filter)
+
+
+@bp.route('/attendance-regularizations/<int:reg_id>/approve', methods=['POST'])
+@module_required('hr')
+def approve_regularization(reg_id):
+    """Approve an attendance regularization request."""
+    reg = AttendanceRegularization.query.get_or_404(reg_id)
+    if reg.status != 'Pending':
+        flash('This request has already been processed.', 'warning')
+        return redirect(url_for('hr.attendance_regularizations'))
+
+    # Apply the override to attendance
+    success, msg = services.override_attendance(
+        reg.employee_id, reg.date,
+        'Present', reg.requested_check_in, reg.requested_check_out,
+        f'Regularized: {reg.reason}'
+    )
+    if success:
+        reg.status = 'Approved'
+        reg.reviewed_by = current_user.id
+        reg.reviewed_at = datetime.utcnow()
+        services.log_audit(current_user.id, 'APPROVE', 'AttendanceRegularization', reg.id,
+                          msg, request.remote_addr or '')
+
+        notif = Notification(
+            user_id=reg.employee.user_id,
+            title='Attendance Regularization Approved',
+            message=f'Your regularization request for {reg.date} has been approved.',
+            category='success',
+            link='/employee/attendance'
+        )
+        db.session.add(notif)
+        db.session.commit()
+        flash(f'Regularization approved for {reg.employee.emp_code} on {reg.date}.', 'success')
+    else:
+        flash(msg, 'danger')
+    return redirect(url_for('hr.attendance_regularizations'))
+
+
+@bp.route('/attendance-regularizations/<int:reg_id>/reject', methods=['POST'])
+@module_required('hr')
+def reject_regularization(reg_id):
+    """Reject an attendance regularization request."""
+    reg = AttendanceRegularization.query.get_or_404(reg_id)
+    if reg.status != 'Pending':
+        flash('This request has already been processed.', 'warning')
+        return redirect(url_for('hr.attendance_regularizations'))
+
+    rejection_reason = request.form.get('reason', '').strip()
+    reg.status = 'Rejected'
+    reg.reviewed_by = current_user.id
+    reg.reviewed_at = datetime.utcnow()
+    reg.rejection_reason = rejection_reason
+    services.log_audit(current_user.id, 'REJECT', 'AttendanceRegularization', reg.id,
+                      f'Rejected for {reg.date}', request.remote_addr or '')
+
+    notif = Notification(
+        user_id=reg.employee.user_id,
+        title='Attendance Regularization Rejected',
+        message=f'Your regularization request for {reg.date} was rejected. {rejection_reason}',
+        category='warning',
+        link='/employee/attendance'
+    )
+    db.session.add(notif)
+    db.session.commit()
+    flash('Regularization request rejected.', 'warning')
+    return redirect(url_for('hr.attendance_regularizations'))
+
+
+# ===========================================================================
+# LEAVE CANCELLATION (HR-Side approval of employee cancellation)
+# ===========================================================================
+@bp.route('/leaves/<int:leave_id>/cancel', methods=['POST'])
+@module_required('hr')
+def cancel_leave(leave_id):
+    """HR cancels an approved leave and restores balance."""
+    leave = Leave.query.get_or_404(leave_id)
+    if leave.status not in ('Approved', 'Pending'):
+        flash(f'Cannot cancel — leave is already {leave.status}.', 'danger')
+        return redirect(url_for('hr.leaves'))
+
+    cancel_reason = request.form.get('reason', 'Cancelled by HR')
+
+    # If was approved, restore leave balance
+    if leave.status == 'Approved' and leave.total_days:
+        balance = services.get_leave_balance(leave.employee_id, leave.leave_type, leave.start_date.year)
+        if balance:
+            balance.used = max(0, balance.used - leave.total_days)
+
+    leave.status = 'Cancelled'
+    leave.cancelled_at = datetime.utcnow()
+    leave.cancelled_reason = cancel_reason
+    services.log_audit(current_user.id, 'CANCEL', 'Leave', leave.id,
+                      f'Cancelled {leave.leave_type} for emp#{leave.employee_id}',
+                      request.remote_addr or '')
+
+    notif = Notification(
+        user_id=leave.employee.user_id,
+        title='Leave Cancelled',
+        message=f'Your {leave.leave_type} leave ({leave.start_date} to {leave.end_date}) has been cancelled. Reason: {cancel_reason}',
+        category='warning',
+        link='/employee/leaves'
+    )
+    db.session.add(notif)
+    db.session.commit()
+    flash(f'Leave cancelled and balance restored.', 'warning')
+    return redirect(url_for('hr.leaves'))
+
+
+# ===========================================================================
+# RESUME DOWNLOAD FOR CANDIDATES
+# ===========================================================================
+@bp.route('/recruitment/candidates/<int:candidate_id>/resume')
+@module_required('hr')
+def download_resume(candidate_id):
+    """Download a candidate's resume file."""
+    candidate = Candidate.query.get_or_404(candidate_id)
+    if not candidate.resume_file:
+        flash('No resume uploaded for this candidate.', 'warning')
+        return redirect(url_for('hr.job_detail', job_id=candidate.job_id))
+    upload_folder = current_app.config.get('UPLOAD_FOLDER', 'static/uploads/documents')
+    return send_from_directory(upload_folder, candidate.resume_file,
+                               as_attachment=True,
+                               download_name=f'{candidate.name}_resume.pdf')

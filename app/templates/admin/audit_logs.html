@@ -5,7 +5,7 @@
 {% block content %}
 <div class="mb-4">
     <h4 style="font-weight:700;">Audit Trail</h4>
-    <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">Last 100 system actions</p>
+    <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">Total {{ logs.total }} system actions</p>
 </div>
 
 <div class="data-card">
@@ -22,7 +22,7 @@
                 </tr>
             </thead>
             <tbody>
-                {% for log in logs %}
+                {% for log in logs.items %}
                 <tr>
                     <td style="white-space:nowrap;">{{ log.timestamp.strftime('%d %b %Y %H:%M') }}</td>
                     <td class="fw-semibold">{{ log.user.full_name if log.user else '—' }}</td>
@@ -50,4 +50,7 @@
         </table>
     </div>
 </div>
+{% with pagination=logs %}
+    {% include 'includes/pagination.html' %}
+{% endwith %}
 {% endblock %}

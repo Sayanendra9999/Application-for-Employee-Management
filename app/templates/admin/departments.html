@@ -43,9 +43,26 @@
                         {% endif %}
                     </td>
                     <td>
-                        <a href="{{ url_for('admin.edit_department', dept_id=dept.id) }}" class="btn-action" title="Edit">
-                            <i class="fas fa-pen-to-square"></i>
-                        </a>
+                        <div class="d-flex gap-2">
+                            <a href="{{ url_for('admin.edit_department', dept_id=dept.id) }}" class="btn-action" title="Edit">
+                                <i class="fas fa-pen-to-square"></i>
+                            </a>
+                            {% if dept.is_active %}
+                            <form method="POST" action="{{ url_for('admin.delete_department', dept_id=dept.id) }}" onsubmit="return confirm('Deactivate this department?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn-action text-danger" title="Deactivate" style="border:none; background:none; padding:0;">
+                                    <i class="fas fa-ban"></i>
+                                </button>
+                            </form>
+                            {% else %}
+                            <form method="POST" action="{{ url_for('admin.restore_department', dept_id=dept.id) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn-action text-success" title="Restore" style="border:none; background:none; padding:0;">
+                                    <i class="fas fa-undo"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
                     </td>
                 </tr>
                 {% else %}

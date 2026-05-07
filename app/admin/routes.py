@@ -9,7 +9,8 @@ from app.extensions import db
 from app.models import (User, Module, UserModule, Employee, Project, Task,
                         Milestone, Notification,
                         Department, Designation, LeavePolicy, AttendanceRule, AuditLog,
-                        Shift, Timesheet)
+                        Shift, Timesheet, LoginHistory, Holiday, ProfileUpdateRequest,
+                        validate_password_complexity)
 from app.admin.forms import UserCreateForm, UserEditForm, ModuleAssignForm
 from app.admin.config_forms import (DepartmentForm, DesignationForm,
                                      LeavePolicyForm, AttendanceRuleForm, ShiftForm)
@@ -524,9 +525,290 @@ def edit_shift(shift_id):
 @bp.route('/audit-logs')
 @admin_required
 def audit_logs():
-    logs = AuditLog.query.order_by(AuditLog.timestamp.desc()).limit(100).all()
+    page = request.args.get('page', 1, type=int)
+    logs = AuditLog.query.order_by(AuditLog.timestamp.desc()).paginate(page=page, per_page=25, error_out=False)
     return render_template('admin/audit_logs.html', logs=logs)
 
+
+# ===========================================================================
+# DEPARTMENT SOFT DELETE — Deactivate / Restore
+# ===========================================================================
+@bp.route('/departments/<int:dept_id>/delete', methods=['POST'])
+@admin_required
+def delete_department(dept_id):
+    """Soft-delete a department (set is_active=False)."""
+    dept = Department.query.get_or_404(dept_id)
+    # Check if department has active employees
+    active_emps = Employee.query.filter_by(department_id=dept.id, is_active=True).count()
+    if active_emps > 0:
+        flash(f'Cannot deactivate "{dept.name}" — {active_emps} active employee(s) assigned.', 'danger')
+        return redirect(url_for('admin.departments'))
+
+    dept.is_active = False
+    from flask_login import current_user
+    log_audit(current_user.id, 'SOFT_DELETE', 'Department', dept.id,
+              f'Deactivated dept {dept.code}')
+    db.session.commit()
+    flash(f'Department "{dept.name}" deactivated.', 'warning')
+    return redirect(url_for('admin.departments'))
+
+
+@bp.route('/departments/<int:dept_id>/restore', methods=['POST'])
+@admin_required
+def restore_department(dept_id):
+    """Restore a soft-deleted department."""
+    dept = Department.query.get_or_404(dept_id)
+    dept.is_active = True
+    from flask_login import current_user
+    log_audit(current_user.id, 'RESTORE', 'Department', dept.id,
+              f'Restored dept {dept.code}')
+    db.session.commit()
+    flash(f'Department "{dept.name}" restored.', 'success')
+    return redirect(url_for('admin.departments'))
+
+
+# ===========================================================================
+# DESIGNATION SOFT DELETE — Deactivate / Restore
+# ===========================================================================
+@bp.route('/designations/<int:desig_id>/delete', methods=['POST'])
+@admin_required
+def delete_designation(desig_id):
+    """Soft-delete a designation (set is_active=False)."""
+    desig = Designation.query.get_or_404(desig_id)
+    active_emps = Employee.query.filter_by(designation_id=desig.id, is_active=True).count()
+    if active_emps > 0:
+        flash(f'Cannot deactivate "{desig.title}" — {active_emps} active employee(s) assigned.', 'danger')
+        return redirect(url_for('admin.designations'))
+
+    desig.is_active = False
+    from flask_login import current_user
+    log_audit(current_user.id, 'SOFT_DELETE', 'Designation', desig.id,
+              f'Deactivated designation {desig.title}')
+    db.session.commit()
+    flash(f'Designation "{desig.title}" deactivated.', 'warning')
+    return redirect(url_for('admin.designations'))
+
+
+@bp.route('/designations/<int:desig_id>/restore', methods=['POST'])
+@admin_required
+def restore_designation(desig_id):
+    """Restore a soft-deleted designation."""
+    desig = Designation.query.get_or_404(desig_id)
+    desig.is_active = True
+    from flask_login import current_user
+    log_audit(current_user.id, 'RESTORE', 'Designation', desig.id,
+              f'Restored designation {desig.title}')
+    db.session.commit()
+    flash(f'Designation "{desig.title}" restored.', 'success')
+    return redirect(url_for('admin.designations'))
+
+
+# ===========================================================================
+# LOGIN HISTORY / USER ACTIVITY (NEW)
+# ===========================================================================
+@bp.route('/login-history')
+@admin_required
+def login_history():
+    """View all login attempts across the system."""
+    user_filter = request.args.get('user', type=int)
+    status_filter = request.args.get('status', '')
+    page = request.args.get('page', 1, type=int)
+
+    query = LoginHistory.query
+    if user_filter:
+        query = query.filter_by(user_id=user_filter)
+    if status_filter:
+        query = query.filter_by(status=status_filter)
+
+    records = query.order_by(LoginHistory.login_at.desc()).paginate(
+        page=page, per_page=30, error_out=False
+    )
+    users = User.query.order_by(User.full_name).all()
+    return render_template('admin/login_history.html', records=records,
+                           users=users, selected_user=user_filter,
+                           selected_status=status_filter)
+
+
+@bp.route('/users/<int:user_id>/unlock', methods=['POST'])
+@admin_required
+def unlock_user(user_id):
+    """Manually unlock a locked user account."""
+    user = User.query.get_or_404(user_id)
+    user.reset_failed_logins()
+    from flask_login import current_user
+    log_audit(current_user.id, 'UNLOCK', 'User', user.id,
+              f'Manually unlocked {user.username}')
+    db.session.commit()
+    flash(f'Account "{user.username}" has been unlocked.', 'success')
+    return redirect(url_for('admin.login_history'))
+
+
+# ===========================================================================
+# NOTIFICATION MANAGEMENT (NEW)
+# ===========================================================================
+@bp.route('/notifications')
+@admin_required
+def notifications():
+    """Admin notification management — view and send notifications."""
+    page = request.args.get('page', 1, type=int)
+    target = request.args.get('target', '')
+
+    query = Notification.query
+    if target:
+        query = query.filter_by(user_id=target)
+
+    notifs = query.order_by(Notification.created_at.desc()).paginate(
+        page=page, per_page=30, error_out=False
+    )
+    users = User.query.filter_by(is_active_user=True).order_by(User.full_name).all()
+    return render_template('admin/notifications.html', notifications=notifs,
+                           users=users, selected_target=target)
+
+
+@bp.route('/notifications/send', methods=['POST'])
+@admin_required
+def send_notification():
+    """Send a notification to one user or all users."""
+    target = request.form.get('target', '')
+    title = request.form.get('title', '').strip()
+    message = request.form.get('message', '').strip()
+    category = request.form.get('category', 'info')
+
+    if not title or not message:
+        flash('Title and message are required.', 'danger')
+        return redirect(url_for('admin.notifications'))
+
+    from flask_login import current_user
+    count = 0
+    if target == 'all':
+        users = User.query.filter_by(is_active_user=True).all()
+        for u in users:
+            n = Notification(user_id=u.id, title=title, message=message, category=category)
+            db.session.add(n)
+            count += 1
+    elif target:
+        n = Notification(user_id=int(target), title=title, message=message, category=category)
+        db.session.add(n)
+        count = 1
+    else:
+        flash('Please select a target recipient.', 'danger')
+        return redirect(url_for('admin.notifications'))
+
+    log_audit(current_user.id, 'SEND', 'Notification', None,
+              f'Sent "{title}" to {count} user(s)')
+    db.session.commit()
+    flash(f'Notification sent to {count} user(s).', 'success')
+    return redirect(url_for('admin.notifications'))
+
+
+@bp.route('/notifications/<int:notif_id>/delete', methods=['POST'])
+@admin_required
+def delete_notification(notif_id):
+    """Delete a notification."""
+    notif = Notification.query.get_or_404(notif_id)
+    db.session.delete(notif)
+    db.session.commit()
+    flash('Notification deleted.', 'warning')
+    return redirect(url_for('admin.notifications'))
+
+
+# ===========================================================================
+# HOLIDAY CALENDAR MANAGEMENT (NEW)
+# ===========================================================================
+@bp.route('/holidays')
+@admin_required
+def holidays():
+    """View company holiday calendar."""
+    year = request.args.get('year', __import__('datetime').date.today().year, type=int)
+    query = Holiday.query.filter(
+        db.extract('year', Holiday.date) == year
+    ).order_by(Holiday.date)
+    all_holidays = query.all()
+    return render_template('admin/holidays.html', holidays=all_holidays, year=year)
+
+
+@bp.route('/holidays/add', methods=['GET', 'POST'])
+@admin_required
+def add_holiday():
+    """Add a company holiday."""
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        date_str = request.form.get('date', '').strip()
+        holiday_type = request.form.get('holiday_type', 'Public')
+        description = request.form.get('description', '').strip()
+
+        if not name or not date_str:
+            flash('Holiday name and date are required.', 'danger')
+            return render_template('admin/holiday_form.html', title='Add Holiday')
+
+        from datetime import datetime as dt
+        try:
+            h_date = dt.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            flash('Invalid date format.', 'danger')
+            return render_template('admin/holiday_form.html', title='Add Holiday')
+
+        existing = Holiday.query.filter_by(name=name, date=h_date).first()
+        if existing:
+            flash('A holiday with this name and date already exists.', 'danger')
+            return render_template('admin/holiday_form.html', title='Add Holiday')
+
+        from flask_login import current_user
+        holiday = Holiday(
+            name=name, date=h_date, holiday_type=holiday_type,
+            description=description, created_by=current_user.id
+        )
+        db.session.add(holiday)
+        log_audit(current_user.id, 'CREATE', 'Holiday', None,
+                  f'Added holiday: {name} on {h_date}')
+        db.session.commit()
+        flash(f'Holiday "{name}" added.', 'success')
+        return redirect(url_for('admin.holidays'))
+
+    return render_template('admin/holiday_form.html', title='Add Holiday')
+
+
+@bp.route('/holidays/<int:holiday_id>/edit', methods=['GET', 'POST'])
+@admin_required
+def edit_holiday(holiday_id):
+    """Edit a company holiday."""
+    holiday = Holiday.query.get_or_404(holiday_id)
+
+    if request.method == 'POST':
+        holiday.name = request.form.get('name', '').strip()
+        date_str = request.form.get('date', '').strip()
+        holiday.holiday_type = request.form.get('holiday_type', 'Public')
+        holiday.description = request.form.get('description', '').strip()
+
+        from datetime import datetime as dt
+        try:
+            holiday.date = dt.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            flash('Invalid date format.', 'danger')
+            return render_template('admin/holiday_form.html', title='Edit Holiday', holiday=holiday)
+
+        from flask_login import current_user
+        log_audit(current_user.id, 'UPDATE', 'Holiday', holiday.id,
+                  f'Updated holiday: {holiday.name}')
+        db.session.commit()
+        flash(f'Holiday "{holiday.name}" updated.', 'success')
+        return redirect(url_for('admin.holidays'))
+
+    return render_template('admin/holiday_form.html', title='Edit Holiday', holiday=holiday)
+
+
+@bp.route('/holidays/<int:holiday_id>/delete', methods=['POST'])
+@admin_required
+def delete_holiday(holiday_id):
+    """Delete a company holiday."""
+    holiday = Holiday.query.get_or_404(holiday_id)
+    from flask_login import current_user
+    log_audit(current_user.id, 'DELETE', 'Holiday', holiday.id,
+              f'Deleted holiday: {holiday.name} ({holiday.date})')
+    db.session.delete(holiday)
+    db.session.commit()
+    flash(f'Holiday "{holiday.name}" deleted.', 'warning')
+    return redirect(url_for('admin.holidays'))
 
 # ===========================================================================
 # PM OVERVIEW (Admin as PM Lead)
@@ -620,12 +902,15 @@ def timesheets():
         except ValueError:
             pass
 
-    records = query.order_by(Timesheet.date.desc()).limit(500).all()
+    page = request.args.get('page', 1, type=int)
+    records = query.order_by(Timesheet.date.desc()).paginate(page=page, per_page=25, error_out=False)
     projects = Project.query.order_by(Project.name).all()
     employees = Employee.query.order_by(Employee.emp_code).all()
 
-    total_hours = round(sum(r.hours_worked for r in records), 2)
-    approved_hours = round(sum(r.hours_worked for r in records if r.status == 'Approved'), 2)
+    # For total hours, we need the full query without pagination
+    # To keep it efficient, we use scalar aggregation
+    total_hours = db.session.query(db.func.coalesce(db.func.sum(Timesheet.hours_worked), 0)).filter(query.whereclause).scalar() if query.whereclause is not None else db.session.query(db.func.coalesce(db.func.sum(Timesheet.hours_worked), 0)).scalar()
+    approved_hours = db.session.query(db.func.coalesce(db.func.sum(Timesheet.hours_worked), 0)).filter(query.whereclause, Timesheet.status == 'Approved').scalar() if query.whereclause is not None else db.session.query(db.func.coalesce(db.func.sum(Timesheet.hours_worked), 0)).filter(Timesheet.status == 'Approved').scalar()
 
     return render_template('admin/timesheets.html', records=records,
                            projects=projects, employees=employees,

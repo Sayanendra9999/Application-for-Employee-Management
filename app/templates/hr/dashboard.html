@@ -93,6 +93,12 @@
                     <a href="{{ url_for('hr.attendance_report') }}" class="btn btn-outline-primary text-start">
                         <i class="fas fa-chart-bar me-2"></i>Attendance Report
                     </a>
+                    <a href="{{ url_for('hr.attendance_regularizations') }}" class="btn btn-outline-primary text-start">
+                        <i class="fas fa-calendar-check me-2"></i>Attendance Regularizations
+                    </a>
+                    <a href="{{ url_for('hr.profile_update_requests') }}" class="btn btn-outline-primary text-start">
+                        <i class="fas fa-user-edit me-2"></i>Profile Update Requests
+                    </a>
                     <a href="{{ url_for('hr.leaves') }}" class="btn btn-outline-primary text-start">
                         <i class="fas fa-calendar-minus me-2"></i>Leave Requests
                         {% if pending_leaves > 0 %}

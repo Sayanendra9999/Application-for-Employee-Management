@@ -25,8 +25,17 @@
             <label class="form-label" style="font-size:0.8rem;">Year</label>
             <input type="number" name="year" class="form-control form-control-sm" value="{{ year }}" min="2020" max="2030">
         </div>
+        <div class="col-md-3">
+            <label class="form-label" style="font-size:0.8rem;">Employee ID</label>
+            <input type="text" name="employee_id" class="form-control form-control-sm" value="{{ emp_search }}" placeholder="Search ID...">
+        </div>
         <div class="col-md-2">
             <button type="submit" class="btn btn-primary btn-sm w-100"><i class="fas fa-chart-bar me-1"></i>Generate</button>
+        </div>
+        <div class="col-md-2">
+            <a href="{{ url_for('hr.export_attendance_report', month=month, year=year, employee_id=emp_search) }}" class="btn btn-outline-secondary btn-sm w-100">
+                <i class="fas fa-download me-1"></i>Export
+            </a>
         </div>
     </form>
 </div>
@@ -40,6 +49,7 @@
         <table class="table">
             <thead>
                 <tr>
+                    <th>Employee ID</th>
                     <th>Employee</th>
                     <th>Department</th>
                     <th style="text-align:center;">Present</th>
@@ -53,6 +63,7 @@
             <tbody>
                 {% for row in report %}
                 <tr>
+                    <td class="fw-semibold">{{ row.employee.emp_code }}</td>
                     <td class="fw-semibold">{{ row.employee.user.full_name }}</td>
                     <td><span class="badge bg-light text-dark border" style="font-size:0.7rem;">{{ row.employee.department_name }}</span></td>
                     <td style="text-align:center;"><span style="color:var(--success); font-weight:600;">{{ row.present }}</span></td>
@@ -65,7 +76,7 @@
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="8" class="text-center py-4" style="color:var(--text-secondary);">No data for this month</td></tr>
+                <tr><td colspan="9" class="text-center py-4" style="color:var(--text-secondary);">No data for this month</td></tr>
                 {% endfor %}
             </tbody>
         </table>

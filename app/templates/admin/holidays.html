@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Holiday Calendar — Admin{% endblock %}
+{% block page_title %}Holiday Calendar{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="fw-bold mb-0"><i class="fas fa-calendar-alt me-2"></i>Company Holidays — {{ year }}</h5>
+        <div class="d-flex gap-2">
+            <a href="?year={{ year - 1 }}" class="btn btn-outline-secondary btn-sm"><i class="fas fa-chevron-left"></i> {{ year - 1 }}</a>
+            <a href="?year={{ year + 1 }}" class="btn btn-outline-secondary btn-sm">{{ year + 1 }} <i class="fas fa-chevron-right"></i></a>
+            <a href="{{ url_for('admin.add_holiday') }}" class="btn btn-primary btn-sm"><i class="fas fa-plus me-1"></i>Add Holiday</a>
+        </div>
+    </div>
+
+    <div class="card" style="border:none; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" style="font-size:0.85rem;">
+                    <thead style="background:var(--bg-secondary); font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px;">
+                        <tr>
+                            <th class="px-3 py-2">#</th>
+                            <th class="px-3 py-2">Holiday Name</th>
+                            <th class="px-3 py-2">Date</th>
+                            <th class="px-3 py-2">Day</th>
+                            <th class="px-3 py-2">Type</th>
+                            <th class="px-3 py-2">Description</th>
+                            <th class="px-3 py-2">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for h in holidays %}
+                        <tr>
+                            <td class="px-3 py-2">{{ loop.index }}</td>
+                            <td class="px-3 py-2 fw-semibold">{{ h.name }}</td>
+                            <td class="px-3 py-2">{{ h.date.strftime('%d %b %Y') }}</td>
+                            <td class="px-3 py-2">{{ h.date.strftime('%A') }}</td>
+                            <td class="px-3 py-2">
+                                {% if h.holiday_type == 'Public' %}<span class="badge bg-success">Public</span>
+                                {% elif h.holiday_type == 'Restricted' %}<span class="badge bg-warning text-dark">Restricted</span>
+                                {% else %}<span class="badge bg-info">Optional</span>{% endif %}
+                            </td>
+                            <td class="px-3 py-2">{{ h.description or '—' }}</td>
+                            <td class="px-3 py-2">
+                                <a href="{{ url_for('admin.edit_holiday', holiday_id=h.id) }}" class="btn btn-outline-primary btn-sm" title="Edit"><i class="fas fa-edit"></i></a>
+                                <form method="POST" action="{{ url_for('admin.delete_holiday', holiday_id=h.id) }}" style="display:inline;" onsubmit="return confirm('Delete this holiday?');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button class="btn btn-outline-danger btn-sm" title="Delete"><i class="fas fa-trash-alt"></i></button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="7" class="text-center text-muted py-4">No holidays configured for {{ year }}.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    {% if holidays %}
+    <div class="text-muted mt-2" style="font-size:0.8rem;">
+        <i class="fas fa-info-circle me-1"></i>Total: {{ holidays|length }} holiday(s) in {{ year }}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

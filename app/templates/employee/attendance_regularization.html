@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Attendance Regularization — Employee{% endblock %}
+{% block page_title %}Attendance Regularization{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="fw-bold mb-0"><i class="fas fa-calendar-check me-2"></i>Request Attendance Regularization</h5>
+        <a href="{{ url_for('employee.attendance') }}" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i>Back to Attendance</a>
+    </div>
+
+    <!-- Submit Form -->
+    <div class="card mb-4" style="border:none; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.06); max-width:600px;">
+        <div class="card-header" style="background:linear-gradient(135deg,#2563eb,#6366f1); color:#fff; border-radius:12px 12px 0 0; padding:14px 20px;">
+            <h6 class="mb-0"><i class="fas fa-edit me-2"></i>New Regularization Request</h6>
+        </div>
+        <div class="card-body">
+            <form method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Date <span class="text-danger">*</span></label>
+                    <input type="date" name="date" class="form-control" required>
+                    <small class="text-muted">Select the date you need attendance corrected for</small>
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-6">
+                        <label class="form-label fw-semibold">Check-in Time</label>
+                        <input type="time" name="check_in" class="form-control" placeholder="HH:MM">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label fw-semibold">Check-out Time</label>
+                        <input type="time" name="check_out" class="form-control" placeholder="HH:MM">
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Reason <span class="text-danger">*</span></label>
+                    <textarea name="reason" class="form-control" rows="3" required
+                              placeholder="Explain why regularization is needed (e.g., forgot to check-in, system issue, etc.)"></textarea>
+                </div>
+
+                <button class="btn btn-primary" type="submit"><i class="fas fa-paper-plane me-1"></i>Submit Request</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- My Regularization History -->
+    {% if regularizations %}
+    <div class="card" style="border:none; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+        <div class="card-header bg-white" style="border-bottom:1px solid #f1f5f9; padding:14px 20px;">
+            <h6 class="mb-0 fw-bold">My Regularization Requests</h6>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" style="font-size:0.85rem;">
+                    <thead style="background:var(--bg-secondary); font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px;">
+                        <tr>
+                            <th class="px-3 py-2">Date</th>
+                            <th class="px-3 py-2">Check-in</th>
+                            <th class="px-3 py-2">Check-out</th>
+                            <th class="px-3 py-2">Reason</th>
+                            <th class="px-3 py-2">Status</th>
+                            <th class="px-3 py-2">Submitted</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in regularizations %}
+                        <tr>
+                            <td class="px-3 py-2">{{ r.date.strftime('%d %b %Y') }}</td>
+                            <td class="px-3 py-2">{{ r.requested_check_in or '—' }}</td>
+                            <td class="px-3 py-2">{{ r.requested_check_out or '—' }}</td>
+                            <td class="px-3 py-2">{{ r.reason[:50] }}{% if r.reason|length > 50 %}...{% endif %}</td>
+                            <td class="px-3 py-2">
+                                {% if r.status == 'Pending' %}<span class="badge bg-warning text-dark">Pending</span>
+                                {% elif r.status == 'Approved' %}<span class="badge bg-success">Approved</span>
+                                {% elif r.status == 'Rejected' %}<span class="badge bg-danger">Rejected</span>{% endif %}
+                            </td>
+                            <td class="px-3 py-2">{{ r.created_at.strftime('%d %b %Y') }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

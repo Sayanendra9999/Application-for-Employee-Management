@@ -6,17 +6,26 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
         <h4 style="font-weight:700;">Attendance Records</h4>
-        <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">{{ records | length }} records shown</p>
+        <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">{{ records.total }} records shown</p>
     </div>
-    <a href="{{ url_for('hr.attendance_checkin') }}" class="btn btn-primary">
-        <i class="fas fa-fingerprint me-2"></i>Check-In / Out
-    </a>
+    <div>
+        <a href="{{ url_for('hr.export_attendance', department=selected_dept, status=selected_status, date_from=date_from, date_to=date_to, employee_id=emp_search) }}" class="btn btn-outline-secondary me-2">
+            <i class="fas fa-download me-2"></i>Export
+        </a>
+        <a href="{{ url_for('hr.attendance_checkin') }}" class="btn btn-primary">
+            <i class="fas fa-fingerprint me-2"></i>Check-In / Out
+        </a>
+    </div>
 </div>
 
 <!-- Filters -->
 <div class="data-card mb-4" style="padding:16px 20px;">
     <form method="GET" class="row g-2 align-items-end">
-        <div class="col-md-3">
+        <div class="col-md-2">
+            <label class="form-label" style="font-size:0.8rem;">Employee ID</label>
+            <input type="text" name="employee_id" class="form-control form-control-sm" value="{{ emp_search }}" placeholder="Search ID...">
+        </div>
+        <div class="col-md-2">
             <label class="form-label" style="font-size:0.8rem;">Department</label>
             <select name="department" class="form-select form-select-sm">
                 <option value="">All</option>
@@ -42,8 +51,8 @@
             <label class="form-label" style="font-size:0.8rem;">To</label>
             <input type="date" name="date_to" class="form-control form-control-sm" value="{{ date_to }}">
         </div>
-        <div class="col-md-2">
-            <button type="submit" class="btn btn-primary btn-sm w-100"><i class="fas fa-search me-1"></i>Filter</button>
+        <div class="col-md-1">
+            <button type="submit" class="btn btn-primary btn-sm w-100"><i class="fas fa-search"></i></button>
         </div>
         <div class="col-md-1">
             <a href="{{ url_for('hr.attendance') }}" class="btn btn-outline-secondary btn-sm w-100">Clear</a>
@@ -63,6 +72,7 @@
             <thead>
                 <tr>
                     <th>Date</th>
+                    <th>Employee ID</th>
                     <th>Employee</th>
                     <th>Department</th>
                     <th>Check In</th>
@@ -72,9 +82,10 @@
                 </tr>
             </thead>
             <tbody>
-                {% for r in records %}
+                {% for r in records.items %}
                 <tr>
                     <td>{{ r.date.strftime('%d %b %Y') }}</td>
+                    <td class="fw-semibold">{{ r.employee.emp_code }}</td>
                     <td class="fw-semibold">{{ r.employee.user.full_name }}</td>
                     <td><span class="badge bg-light text-dark border" style="font-size:0.7rem;">{{ r.employee.department_name }}</span></td>
                     <td>{{ r.check_in or '—' }}</td>
@@ -95,10 +106,13 @@
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="7" class="text-center py-4" style="color:var(--text-secondary);">No attendance records found</td></tr>
+                <tr><td colspan="8" class="text-center py-4" style="color:var(--text-secondary);">No attendance records found</td></tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
+{% with pagination=records %}
+    {% include 'includes/pagination.html' %}
+{% endwith %}
 {% endblock %}

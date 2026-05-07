@@ -82,6 +82,9 @@
                     <td style="font-size:0.82rem;">{{ c.applied_at.strftime('%d %b') }}</td>
                     <td>
                         <div class="d-flex gap-1">
+                            {% if c.resume_file %}
+                            <a href="{{ url_for('hr.download_resume', candidate_id=c.id) }}" target="_blank" class="btn-action text-info" title="Download Resume"><i class="fas fa-file-pdf"></i></a>
+                            {% endif %}
                             <a href="{{ url_for('hr.edit_candidate', candidate_id=c.id) }}" class="btn-action" title="Edit"><i class="fas fa-pen-to-square"></i></a>
                             <a href="{{ url_for('hr.schedule_interview', candidate_id=c.id) }}" class="btn-action" title="Schedule Interview"><i class="fas fa-calendar-plus"></i></a>
                         </div>

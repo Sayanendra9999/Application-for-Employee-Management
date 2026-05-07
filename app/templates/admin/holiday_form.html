@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — Admin{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="mb-4" style="max-width:600px;">
+    <div class="card" style="border:none; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+        <div class="card-body p-4">
+            <form method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Holiday Name <span class="text-danger">*</span></label>
+                    <input type="text" name="name" class="form-control" required
+                           value="{{ holiday.name if holiday else '' }}"
+                           placeholder="e.g. Republic Day">
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Date <span class="text-danger">*</span></label>
+                    <input type="date" name="date" class="form-control" required
+                           value="{{ holiday.date.strftime('%Y-%m-%d') if holiday else '' }}">
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Holiday Type</label>
+                    <select name="holiday_type" class="form-select">
+                        <option value="Public" {% if holiday and holiday.holiday_type == 'Public' %}selected{% endif %}>Public</option>
+                        <option value="Restricted" {% if holiday and holiday.holiday_type == 'Restricted' %}selected{% endif %}>Restricted</option>
+                        <option value="Optional" {% if holiday and holiday.holiday_type == 'Optional' %}selected{% endif %}>Optional</option>
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Description</label>
+                    <input type="text" name="description" class="form-control"
+                           value="{{ holiday.description if holiday else '' }}"
+                           placeholder="Brief description (optional)">
+                </div>
+
+                <div class="d-flex gap-2">
+                    <button class="btn btn-primary" type="submit"><i class="fas fa-save me-1"></i>Save Holiday</button>
+                    <a href="{{ url_for('admin.holidays') }}" class="btn btn-outline-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Holiday Calendar — Employee{% endblock %}
+{% block page_title %}Company Holiday Calendar{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="fw-bold mb-0"><i class="fas fa-umbrella-beach me-2"></i>Holidays — {{ year }}</h5>
+        <div class="d-flex gap-2">
+            <a href="?year={{ year - 1 }}" class="btn btn-outline-secondary btn-sm"><i class="fas fa-chevron-left"></i> {{ year - 1 }}</a>
+            <a href="?year={{ year + 1 }}" class="btn btn-outline-secondary btn-sm">{{ year + 1 }} <i class="fas fa-chevron-right"></i></a>
+        </div>
+    </div>
+
+    {% if holidays %}
+    <div class="row g-3">
+        {% for h in holidays %}
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100" style="border:none; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.06); border-left:4px solid {% if h.holiday_type == 'Public' %}#22c55e{% elif h.holiday_type == 'Restricted' %}#f59e0b{% else %}#3b82f6{% endif %};">
+                <div class="card-body p-3">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <h6 class="fw-bold mb-1">{{ h.name }}</h6>
+                            <div style="font-size:0.85rem; color:#64748b;">
+                                <i class="fas fa-calendar-day me-1"></i>{{ h.date.strftime('%d %B %Y') }} · {{ h.date.strftime('%A') }}
+                            </div>
+                            {% if h.description %}
+                            <small class="text-muted d-block mt-1">{{ h.description }}</small>
+                            {% endif %}
+                        </div>
+                        <span class="badge {% if h.holiday_type == 'Public' %}bg-success{% elif h.holiday_type == 'Restricted' %}bg-warning text-dark{% else %}bg-info{% endif %}" style="font-size:0.7rem;">{{ h.holiday_type }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    <div class="text-muted mt-3" style="font-size:0.8rem;">
+        <i class="fas fa-info-circle me-1"></i>Total: {{ holidays|length }} holiday(s) in {{ year }}
+    </div>
+    {% else %}
+    <div class="card" style="border:none; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+        <div class="card-body text-center py-5">
+            <i class="fas fa-calendar-times" style="font-size:2.5rem; color:#cbd5e1; margin-bottom:1rem;"></i>
+            <p class="text-muted mb-0">No holidays configured for {{ year }}.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

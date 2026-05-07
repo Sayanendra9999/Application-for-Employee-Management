@@ -1,9 +1,29 @@
 """SQLAlchemy models for the Enterprise Portal."""
 
+import re
 from datetime import datetime, date, time
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
 from app.extensions import db
+
+
+# ---------------------------------------------------------------------------
+# Password complexity validation
+# ---------------------------------------------------------------------------
+def validate_password_complexity(password):
+    """Validate password meets complexity requirements.
+    Returns (valid, error_message)."""
+    if len(password) < 8:
+        return False, 'Password must be at least 8 characters long'
+    if not re.search(r'[A-Z]', password):
+        return False, 'Password must contain at least one uppercase letter'
+    if not re.search(r'[a-z]', password):
+        return False, 'Password must contain at least one lowercase letter'
+    if not re.search(r'[0-9]', password):
+        return False, 'Password must contain at least one number'
+    if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
+        return False, 'Password must contain at least one special character (!@#$%^&* etc.)'
+    return True, 'Password meets complexity requirements'
 
 
 # ---------------------------------------------------------------------------
@@ -34,6 +54,8 @@ class User(UserMixin, db.Model):
     is_admin = db.Column(db.Boolean, default=False)
     is_active_user = db.Column(db.Boolean, default=True)
     must_change_password = db.Column(db.Boolean, default=False)
+    failed_login_attempts = db.Column(db.Integer, default=0)
+    locked_until = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # relationships
@@ -42,6 +64,7 @@ class User(UserMixin, db.Model):
     tasks_assigned = db.relationship('Task', backref='assignee', foreign_keys='Task.assigned_to')
     expenses = db.relationship('Expense', backref='submitter', foreign_keys='Expense.submitted_by')
     projects_created = db.relationship('Project', backref='creator', foreign_keys='Project.created_by')
+    login_history = db.relationship('LoginHistory', backref='user', lazy='dynamic')
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -62,6 +85,26 @@ class User(UserMixin, db.Model):
             except Exception:
                 return False
         return check_password_hash(self.password_hash, password)
+
+    @property
+    def is_locked(self):
+        """Check if the account is currently locked."""
+        if self.locked_until and self.locked_until > datetime.utcnow():
+            return True
+        return False
+
+    def record_failed_login(self):
+        """Increment failed login counter and lock if threshold exceeded."""
+        self.failed_login_attempts = (self.failed_login_attempts or 0) + 1
+        if self.failed_login_attempts >= 3:
+            # Lock for 15 minutes
+            from datetime import timedelta
+            self.locked_until = datetime.utcnow() + timedelta(minutes=15)
+
+    def reset_failed_logins(self):
+        """Reset failed login counter after successful login."""
+        self.failed_login_attempts = 0
+        self.locked_until = None
 
     def has_module(self, slug):
         """Check if user has access to a module by slug."""
@@ -291,7 +334,7 @@ class Leave(db.Model):
     start_date = db.Column(db.Date, nullable=False)
     end_date = db.Column(db.Date, nullable=False)
     total_days = db.Column(db.Integer, default=1)
-    status = db.Column(db.String(20), default='Pending')           # Pending, Approved, Rejected
+    status = db.Column(db.String(20), default='Pending')           # Pending, Approved, Rejected, Cancelled
     reason = db.Column(db.Text, default='')
     rejection_reason = db.Column(db.Text, default='')
     approved_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
@@ -300,6 +343,9 @@ class Leave(db.Model):
     manager_approved_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     hr_status = db.Column(db.String(20), default='Pending')        # Pending, Approved, Rejected
     hr_approved_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    # Cancellation fields
+    cancelled_at = db.Column(db.DateTime, nullable=True)
+    cancelled_reason = db.Column(db.Text, default='')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     approver = db.relationship('User', foreign_keys=[approved_by])
@@ -887,3 +933,81 @@ class Timesheet(db.Model):
 
     def __repr__(self):
         return f'<Timesheet #{self.id} emp#{self.employee_id} {self.date} {self.hours_worked}h {self.status}>'
+
+
+# ===========================================================================
+# LOGIN & SECURITY MODELS
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# LoginHistory — Tracks all login activity for auditing
+# ---------------------------------------------------------------------------
+class LoginHistory(db.Model):
+    __tablename__ = 'login_history'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    login_at = db.Column(db.DateTime, default=datetime.utcnow)
+    ip_address = db.Column(db.String(45), default='')
+    user_agent = db.Column(db.String(500), default='')         # Browser/device info
+    status = db.Column(db.String(20), default='Success')       # Success, Failed, Locked
+    details = db.Column(db.String(250), default='')
+
+    def __repr__(self):
+        return f'<LoginHistory user#{self.user_id} {self.status} at {self.login_at}>'
+
+
+# ===========================================================================
+# HOLIDAY CALENDAR MODEL
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Holiday — Company-wide holidays managed by Admin/HR
+# ---------------------------------------------------------------------------
+class Holiday(db.Model):
+    __tablename__ = 'holidays'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    holiday_type = db.Column(db.String(30), default='Public')     # Public, Restricted, Optional
+    description = db.Column(db.String(250), default='')
+    is_active = db.Column(db.Boolean, default=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    creator = db.relationship('User', foreign_keys=[created_by])
+
+    __table_args__ = (db.UniqueConstraint('name', 'date', name='uq_holiday_name_date'),)
+
+    def __repr__(self):
+        return f'<Holiday {self.name} on {self.date}>'
+
+
+# ===========================================================================
+# ATTENDANCE REGULARIZATION MODEL
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# AttendanceRegularization — Employee requests attendance correction
+# ---------------------------------------------------------------------------
+class AttendanceRegularization(db.Model):
+    __tablename__ = 'attendance_regularizations'
+
+    id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey('employees.id', ondelete='CASCADE'), nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    requested_check_in = db.Column(db.String(10), default='')    # HH:MM
+    requested_check_out = db.Column(db.String(10), default='')   # HH:MM
+    reason = db.Column(db.Text, default='')
+    status = db.Column(db.String(20), default='Pending')         # Pending, Approved, Rejected
+    reviewed_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    reviewed_at = db.Column(db.DateTime, nullable=True)
+    rejection_reason = db.Column(db.Text, default='')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    employee = db.relationship('Employee', backref=db.backref('regularization_requests', lazy='dynamic'))
+    reviewer = db.relationship('User', foreign_keys=[reviewed_by])
+
+    def __repr__(self):
+        return f'<AttendanceRegularization emp#{self.employee_id} {self.date} {self.status}>'

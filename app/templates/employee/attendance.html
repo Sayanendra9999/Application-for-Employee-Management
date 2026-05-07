@@ -73,8 +73,13 @@
 <!-- Attendance History -->
 <div class="data-card">
     <div class="card-header">
-        <h5><i class="fas fa-calendar-days me-2"></i>Attendance History</h5>
-        <span style="font-size:0.82rem; color:var(--text-secondary);">{{ records|length }} records</span>
+        <div>
+            <h5 style="margin-bottom: 0;"><i class="fas fa-calendar-days me-2"></i>Attendance History</h5>
+            <span style="font-size:0.82rem; color:var(--text-secondary);">{{ records|length }} records</span>
+        </div>
+        <a href="{{ url_for('employee.attendance_regularization') }}" class="btn btn-outline-primary btn-sm">
+            <i class="fas fa-edit me-1"></i>Regularize
+        </a>
     </div>
     <div class="table-responsive">
         <table class="table">

@@ -57,6 +57,10 @@ def create_app(config_class=Config):
                 return redirect(url_for('auth.change_password'))
 
     # ── Root routes ──────────────────────────────────────────────────────
+    @app.route('/favicon.ico')
+    def favicon():
+        return '', 204
+
     @app.route('/')
     def index():
         if current_user.is_authenticated:

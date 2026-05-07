@@ -54,10 +54,22 @@
 {% endif %}
 
 <div class="data-card">
+    <div class="p-3 border-bottom bg-white" style="border-radius: 12px 12px 0 0;">
+        <div class="d-flex gap-2 align-items-center">
+            <div class="input-group input-group-sm" style="max-width: 300px;">
+                <span class="input-group-text bg-transparent border-end-0"><i class="fas fa-search text-muted"></i></span>
+                <input type="search" id="empIdSearch" class="form-control border-start-0 ps-0 shadow-none" placeholder="Filter by Employee ID...">
+            </div>
+            <button class="btn btn-sm btn-outline-secondary" id="clearSearch" title="Clear Search">
+                <i class="fas fa-times me-1"></i>Clear
+            </button>
+        </div>
+    </div>
     <div class="table-responsive">
         <table class="table" id="users-table">
             <thead>
                 <tr>
+                    <th>Emp ID</th>
                     <th>Name</th>
                     <th>Username</th>
                     <th>Email</th>
@@ -70,7 +82,14 @@
             </thead>
             <tbody>
                 {% for user in users %}
-                <tr>
+                <tr class="user-row" data-emp-id="{{ user.employee.emp_code if user.employee else '' }}">
+                    <td>
+                        {% if user.employee %}
+                        <span class="fw-bold text-secondary" style="font-size: 0.85rem;">{{ user.employee.emp_code }}</span>
+                        {% else %}
+                        <span class="text-muted small">—</span>
+                        {% endif %}
+                    </td>
                     <td class="fw-semibold">{{ user.full_name }}</td>
                     <td><code>{{ user.username }}</code></td>
                     <td>{{ user.email }}</td>
@@ -139,4 +158,56 @@
         </table>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('empIdSearch');
+    const tableRows = document.querySelectorAll('.user-row');
+
+    if (searchInput) {
+        const clearBtn = document.getElementById('clearSearch');
+        
+        searchInput.addEventListener('input', function(e) {
+            const searchTerm = e.target.value.trim().toLowerCase();
+            
+            tableRows.forEach(row => {
+                const empId = row.getAttribute('data-emp-id').toLowerCase();
+                
+                if (searchTerm === '' || empId.includes(searchTerm)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        });
+
+        if (clearBtn) {
+            clearBtn.addEventListener('click', function() {
+                searchInput.value = '';
+                // Trigger the input event to reset the table
+                searchInput.dispatchEvent(new Event('input'));
+            });
+        }
+    }
+
+    // Copy to clipboard for temporary passwords
+    const copyBtns = document.querySelectorAll('.btn-copy');
+    copyBtns.forEach(btn => {
+        btn.addEventListener('click', function() {
+            const textToCopy = this.getAttribute('data-copy');
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                const originalHtml = this.innerHTML;
+                this.innerHTML = '<i class="fas fa-check me-1"></i>Copied';
+                this.classList.replace('btn-outline-primary', 'btn-success');
+                setTimeout(() => {
+                    this.innerHTML = originalHtml;
+                    this.classList.replace('btn-success', 'btn-outline-primary');
+                }, 2000);
+            });
+        });
+    });
+});
+</script>
 {% endblock %}

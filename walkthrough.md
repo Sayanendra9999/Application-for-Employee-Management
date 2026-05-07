@@ -75,13 +75,20 @@ python app.py
 
 | Username | Password | Role | Accessible Modules |
 |---|---|---|---|
-| `admin` | `admin123` | **Admin (superuser)** | Admin, HR, PM, Finance, Employee |
-| `hr_manager` | `hr123` | HR Manager | HR, Employee |
-| `pm_lead` | `pm123` | PM Lead | PM, Employee |
-| `finance_head` | `fin123` | Finance Head | Finance, Employee |
-| `john_doe` | `john123` | Developer | PM, Employee |
-| `jane_smith` | `jane123` | Accountant | Finance, Employee |
-| `bob_wilson` | `bob123` | HR Staff | HR, Employee |
+| `admin` | `Admin@123` | **Admin (superuser)** | Admin, HR, PM, Finance, Employee |
+| `hr_manager` | `Hr_manager@123` | HR Manager | HR, Employee |
+| `pm_lead` | `Pm_lead@123` | PM Lead | PM, Employee |
+| `finance_head` | `Finance_head@123` | Finance Head | Finance, Employee |
+| `john_doe` | `John_doe@123` | Developer | PM, Employee |
+| `jane_smith` | `Jane_smith@123` | Accountant | Finance, Employee |
+| `bob_wilson` | `Bob_wilson@123` | HR Staff | HR, Employee |
+| `pm_manager_1` | `Pm_manager_1@123` | Project Manager | PM, Employee |
+| `pm_manager_2` | `Pm_manager_2@123` | Project Manager | PM, Employee |
+| `Allavarapu` | `Allavarapu@123` | **Admin (superuser)** | Admin, HR, PM, Finance, Employee |
+| `Vamshi` | `Vamshi@123` | HR Staff | HR, Employee |
+| `Reddy` | `Reddy@123` | Employee | Employee |
+| `SAI` | `Sai@123` | Employee | Employee |
+| `SHEKHAR` | `Shekhar@123` | Employee | Employee |
 
 ---
 

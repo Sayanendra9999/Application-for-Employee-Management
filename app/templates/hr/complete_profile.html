@@ -58,6 +58,24 @@
                 {{ form.date_of_joining.label(class="form-label fw-semibold") }}
                 {{ form.date_of_joining(class="form-control", type="date") }}
             </div>
+            
+            <div class="col-md-6 mt-3">
+                <label class="form-label fw-semibold">Mobile Number</label>
+                <div class="input-group">
+                    <select name="country_code" class="form-select" style="max-width: 120px;" id="countryCode">
+                        <option value="+1">+1 (USA/CAN)</option>
+                        <option value="+44">+44 (UK)</option>
+                        <option value="+61">+61 (AUS)</option>
+                        <option value="+91" selected>+91 (IND)</option>
+                        <option value="+971">+971 (UAE)</option>
+                        <!-- Excluding +92 (PAK) -->
+                    </select>
+                    <input type="text" name="phone" class="form-control" placeholder="1234567890" pattern="\d{10}" title="Must be exactly 10 digits" required oninput="hideWarning(this)">
+                </div>
+                {% if 'Phone' in missing %}
+                <div class="text-warning mt-1 missing-warning" style="font-size:0.78rem;" id="warning-phone"><i class="fas fa-exclamation-triangle me-1"></i>Required — currently missing</div>
+                {% endif %}
+            </div>
 
             <div class="col-12"><hr style="border-color:var(--border-color); margin:8px 0;"></div>
             <div class="col-12">
@@ -66,18 +84,18 @@
 
             <div class="col-md-6">
                 {{ form.department_id.label(class="form-label fw-semibold") }}
-                {{ form.department_id(class="form-select", id="department_id") }}
+                {{ form.department_id(class="form-select", id="department_id", onchange="hideWarning(this)") }}
                 <small class="text-muted">Configured by Admin</small>
                 {% if 'Department' in missing %}
-                <div class="text-warning mt-1" style="font-size:0.78rem;"><i class="fas fa-exclamation-triangle me-1"></i>Required — currently missing</div>
+                <div class="text-warning mt-1 missing-warning" style="font-size:0.78rem;" id="warning-department_id"><i class="fas fa-exclamation-triangle me-1"></i>Required — currently missing</div>
                 {% endif %}
             </div>
             <div class="col-md-6">
                 {{ form.designation_id.label(class="form-label fw-semibold") }}
-                {{ form.designation_id(class="form-select", id="designation_id") }}
+                {{ form.designation_id(class="form-select", id="designation_id", onchange="hideWarning(this)") }}
                 <small class="text-muted">Configured by Admin</small>
                 {% if 'Designation' in missing %}
-                <div class="text-warning mt-1" style="font-size:0.78rem;"><i class="fas fa-exclamation-triangle me-1"></i>Required — currently missing</div>
+                <div class="text-warning mt-1 missing-warning" style="font-size:0.78rem;" id="warning-designation_id"><i class="fas fa-exclamation-triangle me-1"></i>Required — currently missing</div>
                 {% endif %}
             </div>
 
@@ -88,23 +106,23 @@
 
             <div class="col-md-4">
                 {{ form.salary.label(class="form-label fw-semibold") }}
-                {{ form.salary(class="form-control", placeholder="50000") }}
+                {{ form.salary(class="form-control", placeholder="50000", oninput="hideWarning(this)", required=true) }}
                 {% if 'Salary' in missing %}
-                <div class="text-warning mt-1" style="font-size:0.78rem;"><i class="fas fa-exclamation-triangle me-1"></i>Required — currently missing</div>
+                <div class="text-warning mt-1 missing-warning" style="font-size:0.78rem;" id="warning-salary"><i class="fas fa-exclamation-triangle me-1"></i>Required — currently missing</div>
                 {% endif %}
             </div>
             <div class="col-md-4">
                 {{ form.bank_account.label(class="form-label fw-semibold") }}
-                {{ form.bank_account(class="form-control", placeholder="XXXX-XXXX-1234") }}
+                {{ form.bank_account(class="form-control", placeholder="XXXX-XXXX-1234", pattern="\\d{8,12}", title="Bank account must be 8-12 digits", oninput="hideWarning(this)", required=true) }}
                 {% if 'Bank Account' in missing %}
-                <div class="text-warning mt-1" style="font-size:0.78rem;"><i class="fas fa-exclamation-triangle me-1"></i>Required — currently missing</div>
+                <div class="text-warning mt-1 missing-warning" style="font-size:0.78rem;" id="warning-bank_account"><i class="fas fa-exclamation-triangle me-1"></i>Required — currently missing</div>
                 {% endif %}
             </div>
             <div class="col-md-4">
                 {{ form.pan_number.label(class="form-label fw-semibold") }}
-                {{ form.pan_number(class="form-control", placeholder="ABCDE1234F") }}
+                {{ form.pan_number(class="form-control", placeholder="ABCDE1234F", pattern="[A-Za-z0-9]{10}", title="PAN must be exactly 10 alphanumeric characters", oninput="hideWarning(this)", required=true) }}
                 {% if 'PAN Number' in missing %}
-                <div class="text-warning mt-1" style="font-size:0.78rem;"><i class="fas fa-exclamation-triangle me-1"></i>Required — currently missing</div>
+                <div class="text-warning mt-1 missing-warning" style="font-size:0.78rem;" id="warning-pan_number"><i class="fas fa-exclamation-triangle me-1"></i>Required — currently missing</div>
                 {% endif %}
             </div>
         </div>
@@ -120,10 +138,53 @@
 </div>
 
 <script>
+// Hide warning message when user types/selects
+function hideWarning(element) {
+    const val = element.value.trim();
+    const warningEl = document.getElementById('warning-' + element.name);
+    
+    // Custom check for numerical-only fields (phone and bank account)
+    if (element.name === 'phone' || element.name === 'bank_account') {
+        if (/[^0-9]/.test(val)) {
+            if (warningEl) {
+                warningEl.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i>Only numericals are allowed in this section';
+                warningEl.style.display = 'block';
+            }
+            // Strip the alphabetical characters automatically for a better UX
+            element.value = val.replace(/[^0-9]/g, '');
+            return;
+        }
+    }
+
+    // Check validity constraints first for pattern matching
+    let isValid = true;
+    if (element.hasAttribute('pattern')) {
+        isValid = new RegExp('^' + element.getAttribute('pattern') + '$').test(val);
+    }
+    
+    if (warningEl) {
+        if (val !== '' && val !== '0' && isValid) {
+            warningEl.style.display = 'none';
+        } else {
+            // Restore default warning text if it was changed
+            if (element.name === 'phone' || element.name === 'bank_account') {
+                warningEl.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i>Required — currently missing';
+            }
+            warningEl.style.display = 'block';
+        }
+    }
+}
+
 // Dynamic designation dropdown based on department selection
 document.addEventListener('DOMContentLoaded', function() {
     var deptSel = document.getElementById('department_id');
     var desigSel = document.getElementById('designation_id');
+    
+    // Initial check on load
+    document.querySelectorAll('input, select').forEach(function(el) {
+        if(el.value) { hideWarning(el); }
+    });
+
     if (!deptSel || !desigSel) return;
 
     deptSel.addEventListener('change', function() {

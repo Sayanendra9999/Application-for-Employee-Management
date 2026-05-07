@@ -16,10 +16,22 @@
 </div>
 
 <div class="data-card">
+    <div class="p-3 border-bottom bg-white" style="border-radius: 12px 12px 0 0;">
+        <div class="d-flex gap-2 align-items-center">
+            <div class="input-group input-group-sm" style="max-width: 300px;">
+                <span class="input-group-text bg-transparent border-end-0"><i class="fas fa-search text-muted"></i></span>
+                <input type="search" id="empSearch" class="form-control border-start-0 ps-0 shadow-none" placeholder="Filter by Emp ID or Username...">
+            </div>
+            <button class="btn btn-sm btn-outline-secondary" id="clearSearch" title="Clear Search">
+                <i class="fas fa-times me-1"></i>Clear
+            </button>
+        </div>
+    </div>
     <div class="table-responsive">
         <table class="table">
             <thead>
                 <tr>
+                    <th>Emp ID</th>
                     <th>Employee</th>
                     <th>Department</th>
                     {% for p in policies %}
@@ -32,8 +44,12 @@
             </thead>
             <tbody>
                 {% for row in balance_data %}
-                <tr>
-                    <td class="fw-semibold">{{ row.employee.user.full_name }}</td>
+                <tr class="emp-row" data-emp-id="{{ row.employee.emp_code }}" data-username="{{ row.employee.user.username }}">
+                    <td><code>{{ row.employee.emp_code }}</code></td>
+                    <td>
+                        <div class="fw-semibold">{{ row.employee.user.full_name }}</div>
+                        <div class="text-muted" style="font-size:0.75rem;">@{{ row.employee.user.username }}</div>
+                    </td>
                     <td><span class="badge bg-light text-dark border" style="font-size:0.7rem;">{{ row.employee.department_name }}</span></td>
                     {% for p in policies %}
                     {% set bal = row.balances.get(p.leave_type) %}
@@ -56,4 +72,38 @@
         </table>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('empSearch');
+    const clearBtn = document.getElementById('clearSearch');
+    const tableRows = document.querySelectorAll('.emp-row');
+
+    if (searchInput) {
+        searchInput.addEventListener('input', function(e) {
+            const searchTerm = e.target.value.trim().toLowerCase();
+            
+            tableRows.forEach(row => {
+                const empId = (row.getAttribute('data-emp-id') || '').toLowerCase();
+                const username = (row.getAttribute('data-username') || '').toLowerCase();
+                
+                if (searchTerm === '' || empId.includes(searchTerm) || username.includes(searchTerm)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        });
+
+        if (clearBtn) {
+            clearBtn.addEventListener('click', function() {
+                searchInput.value = '';
+                searchInput.dispatchEvent(new Event('input'));
+            });
+        }
+    }
+});
+</script>
 {% endblock %}

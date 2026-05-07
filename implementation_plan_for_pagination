@@ -1,0 +1,59 @@
+# Add Pagination to Portal Lists
+
+The system currently uses `.all()` or `.limit()` for retrieving data in several list views. This approach will lead to performance issues and high memory usage as data grows. We will implement Flask-SQLAlchemy pagination (`.paginate()`) to address this.
+
+## Proposed Changes
+
+### Global Pagination Template
+#### [NEW] `app/templates/includes/pagination.html`
+We will create a reusable pagination partial template to render the page links, preserving existing query parameters.
+
+---
+
+### Admin Module
+#### [MODIFY] `app/admin/routes.py`
+- `audit_logs` (Line 527): Update to use `page = request.args.get('page', 1, type=int)` and `.paginate(page=page, per_page=25, error_out=False)`.
+- `timesheets` (Line 623): Update to use `paginate` instead of `limit(500).all()`.
+#### [MODIFY] `app/templates/admin/audit_logs.html`
+- Update `{% for log in logs %}` to `{% for log in logs.items %}`.
+- Include the pagination partial.
+#### [MODIFY] `app/templates/admin/timesheets.html`
+- Update `{% for r in records %}` to `{% for r in records.items %}`.
+- Include the pagination partial.
+
+---
+
+### HR Module
+#### [MODIFY] `app/hr/routes.py`
+- `employees` (Line 107): Convert in-memory python list filter (`status_filter`) into a SQLAlchemy filter to allow `.paginate()` to work on the database level. Add `page` and `.paginate(page=page, per_page=25)`.
+- `attendance` (Line 329): Add pagination for the attendance records list.
+- `leaves` (Line 524): Add pagination for the leaves list.
+- `timesheets` (Line 1149): Add pagination for the HR timesheets list.
+#### [MODIFY] `app/templates/hr/employees.html`
+- Update `{% for emp in employees %}` to `{% for emp in employees.items %}`.
+- Replace `employees | length` with `employees.total`.
+- Include the pagination partial.
+#### [MODIFY] `app/templates/hr/attendance.html`
+- Update `{% for r in records %}` to `{% for r in records.items %}`. Include pagination.
+#### [MODIFY] `app/templates/hr/leaves.html`
+- Update `{% for leave in leaves %}` to `{% for leave in leaves.items %}`. Include pagination.
+#### [MODIFY] `app/templates/hr/timesheets.html`
+- Update `{% for r in records %}` to `{% for r in records.items %}`. Include pagination.
+
+---
+
+### PM Module
+#### [MODIFY] `app/pm/routes.py`
+- `timesheet_approvals` (around Line 814): Update `.all()` to `.paginate()`.
+#### [MODIFY] `app/templates/pm/timesheet_approvals.html`
+- Update `{% for ts in timesheets %}` to `{% for ts in timesheets.items %}`. Include pagination.
+
+---
+
+### Document Update
+#### [MODIFY] `c:\Users\Vamshidhar Reddy\.gemini\antigravity\brain\c12157ad-45ae-4e12-b303-dd2e2ef06b2c\improvement_analysis.md.resolved`
+- Mark the pagination issue as fixed in the improvement analysis document.
+
+## User Review Required
+> [!IMPORTANT]
+> The `employees` status filter (assigned/unassigned) currently executes in python on a loaded list. To paginate correctly, I will need to translate `services.is_employee_profile_complete(emp)` into a SQLAlchemy `.filter()` condition inside `hr/routes.py`. The logic maps directly to checking fields like `department_id`, `designation_id`, `salary`, `bank_account`, `pan_number` and `phone`. Let me know if you approve this plan!

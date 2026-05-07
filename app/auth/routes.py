@@ -7,7 +7,7 @@ from flask_mail import Message
 
 from app.auth import bp
 from app.auth.forms import LoginForm, ChangePasswordForm, ResetPasswordForm
-from app.models import User
+from app.models import User, LoginHistory, validate_password_complexity
 from app.extensions import db, mail
 
 
@@ -83,8 +83,23 @@ def send_reset_email(user, token):
     mail.send(msg)
 
 
+def _log_login_attempt(user_id, status, details=''):
+    """Record a login attempt in the login_history table."""
+    try:
+        entry = LoginHistory(
+            user_id=user_id,
+            ip_address=request.remote_addr or '',
+            user_agent=request.headers.get('User-Agent', '')[:500],
+            status=status,
+            details=details
+        )
+        db.session.add(entry)
+    except Exception:
+        pass  # Don't break login flow if history logging fails
+
+
 # ---------------------------------------------------------------------------
-# Login
+# Login — with account lockout and login history
 # ---------------------------------------------------------------------------
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
@@ -96,12 +111,42 @@ def login():
     form = LoginForm()
     if form.validate_on_submit():
         user = User.query.filter(User.username.ilike(form.username.data)).first()
-        if user is None or not user.check_password(form.password.data):
-            flash('Invalid username or password.', 'danger')
+
+        # Check if account is locked
+        if user and user.is_locked:
+            remaining_mins = int((user.locked_until - __import__('datetime').datetime.utcnow()).total_seconds() / 60) + 1
+            _log_login_attempt(user.id, 'Locked', f'Account locked. {remaining_mins} min remaining.')
+            db.session.commit()
+            flash(f'Account is locked due to too many failed attempts. Try again in {remaining_mins} minute(s).', 'danger')
             return redirect(url_for('auth.login'))
+
+        if user is None or not user.check_password(form.password.data):
+            if user:
+                user.record_failed_login()
+                attempts_left = max(0, 3 - (user.failed_login_attempts or 0))
+                _log_login_attempt(user.id, 'Failed', f'Invalid password. {attempts_left} attempts remaining.')
+                db.session.commit()
+                if user.is_locked:
+                    flash('Account locked due to too many failed attempts. Try again in 15 minutes.', 'danger')
+                elif attempts_left <= 2:
+                    flash(f'Invalid username or password. {attempts_left} attempt(s) remaining before lockout.', 'danger')
+                else:
+                    flash('Invalid username or password.', 'danger')
+            else:
+                flash('Invalid username or password.', 'danger')
+            return redirect(url_for('auth.login'))
+
         if not user.is_active:
+            _log_login_attempt(user.id, 'Failed', 'Account deactivated')
+            db.session.commit()
             flash('Your account has been deactivated. Contact admin.', 'warning')
             return redirect(url_for('auth.login'))
+
+        # Successful login — reset failed attempts and log
+        user.reset_failed_logins()
+        _log_login_attempt(user.id, 'Success', 'Login successful')
+        db.session.commit()
+
         login_user(user, remember=form.remember.data)
 
         # Check if user must change password on first login
@@ -143,6 +188,12 @@ def change_password():
 
         if form.current_password.data == form.new_password.data:
             flash('New password must be different from the current password.', 'warning')
+            return render_template('change_password.html', form=form, forced=is_forced)
+
+        # Enforce password complexity
+        valid, complexity_msg = validate_password_complexity(form.new_password.data)
+        if not valid:
+            flash(complexity_msg, 'danger')
             return render_template('change_password.html', form=form, forced=is_forced)
 
         current_user.set_password(form.new_password.data)
@@ -211,8 +262,15 @@ def reset_password(token):
 
     form = ResetPasswordForm()
     if form.validate_on_submit():
+        # Enforce password complexity
+        valid, complexity_msg = validate_password_complexity(form.new_password.data)
+        if not valid:
+            flash(complexity_msg, 'danger')
+            return render_template('reset_password.html', form=form, token=token)
+
         user.set_password(form.new_password.data)
         user.must_change_password = False
+        user.reset_failed_logins()  # Unlock account on password reset
         db.session.commit()
         flash('Your password has been reset successfully! You can now sign in.', 'success')
         return redirect(url_for('auth.login'))

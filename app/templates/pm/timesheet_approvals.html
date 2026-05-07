@@ -71,7 +71,7 @@
 
 <!-- Timesheets Table -->
 <div class="data-card">
-    {% if timesheets and selected_status == 'Pending' %}
+    {% if timesheets.items and selected_status == 'Pending' %}
     <form method="POST" action="{{ url_for('pm.bulk_approve_timesheets') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="p-3 d-flex justify-content-end gap-2" style="border-bottom:1px solid var(--border-color);">
@@ -100,7 +100,7 @@
                 </tr>
             </thead>
             <tbody>
-                {% for ts in timesheets %}
+                {% for ts in timesheets.items %}
                 <tr>
                     {% if selected_status == 'Pending' %}
                     <td><input type="checkbox" name="timesheet_ids" value="{{ ts.id }}" class="form-check-input ts-checkbox"></td>
@@ -171,10 +171,13 @@
         </table>
     </div>
 
-    {% if timesheets and selected_status == 'Pending' %}
+    {% if timesheets.items and selected_status == 'Pending' %}
     </form>
     {% endif %}
 </div>
+{% with pagination=timesheets %}
+    {% include 'includes/pagination.html' %}
+{% endwith %}
 
 <script>
 function toggleSelectAll() {
