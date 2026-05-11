@@ -140,19 +140,25 @@ def edit_employee(emp_id):
     form.department_id.choices = [(0, '— Select Department —')] + services.get_departments_for_dropdown()
     form.designation_id.choices = [(0, '— Select Designation —')] + services.get_designations_for_dropdown()
     form.shift_id.choices = [(0, '— General Shift —')] + services.get_shifts_for_dropdown()
+    form.reporting_manager_id.choices = [(0, '— No Manager (Direct to HR) —')] + services.get_managers_for_dropdown(exclude_emp_id=emp.id)
 
     if request.method == 'GET':
         form.shift_id.data = emp.shift_id or 0
+        form.reporting_manager_id.data = emp.reporting_manager_id or 0
 
     if form.validate_on_submit():
         # emp_code is system-assigned by Admin and immutable — not updated here
         emp.department_id = form.department_id.data if form.department_id.data != 0 else None
         emp.designation_id = form.designation_id.data if form.designation_id.data != 0 else None
         emp.shift_id = form.shift_id.data if form.shift_id.data != 0 else None
+        emp.reporting_manager_id = form.reporting_manager_id.data if form.reporting_manager_id.data != 0 else None
+        emp.date_of_birth = form.date_of_birth.data
         emp.date_of_joining = form.date_of_joining.data
         emp.salary = form.salary.data or 0
         emp.bank_account = form.bank_account.data or ''
         emp.pan_number = form.pan_number.data or ''
+        emp.aadhar_number = form.aadhar_number.data or ''
+        emp.location = form.location.data or ''
 
         # Reinitialize leave balances if designation changed (role-based policies)
         services.initialize_leave_balances(emp.id)
@@ -217,6 +223,7 @@ def complete_profile(emp_id):
     form.department_id.choices = [(0, '— Select Department —')] + services.get_departments_for_dropdown()
     form.designation_id.choices = [(0, '— Select Designation —')] + services.get_designations_for_dropdown()
     form.shift_id.choices = [(0, '— General Shift —')] + services.get_shifts_for_dropdown()
+    form.reporting_manager_id.choices = [(0, '— No Manager (Direct to HR) —')] + services.get_managers_for_dropdown(exclude_emp_id=emp.id)
 
     missing = services.get_missing_fields(emp)
 
@@ -228,12 +235,18 @@ def complete_profile(emp_id):
             salary=form.salary.data,
             bank_account=form.bank_account.data,
             pan_number=form.pan_number.data,
+            aadhar_number=form.aadhar_number.data,
+            date_of_birth=form.date_of_birth.data,
+            location=form.location.data,
             phone=request.form.get('phone', '').strip(),
             country_code=request.form.get('country_code', '+91'),
             date_of_joining=form.date_of_joining.data
         )
         if success:
             # emp_code is system-assigned by Admin — not modified here
+
+            # Set reporting manager if selected
+            emp.reporting_manager_id = form.reporting_manager_id.data if form.reporting_manager_id.data != 0 else None
 
             # Initialize leave balances if not already done
             services.initialize_leave_balances(emp.id)
@@ -1398,14 +1411,23 @@ def analytics():
 @bp.route('/profile-update-requests')
 @module_required('hr')
 def profile_update_requests():
-    """View all profile update requests from employees."""
+    """View all profile update requests from employees, grouped by employee."""
     status_filter = request.args.get('status', '')
     query = ProfileUpdateRequest.query
     if status_filter:
         query = query.filter_by(status=status_filter)
-    requests_list = query.order_by(ProfileUpdateRequest.created_at.desc()).all()
+    
+    # Order by employee then date so grouping is clean
+    requests_list = query.order_by(ProfileUpdateRequest.employee_id, ProfileUpdateRequest.created_at.desc()).all()
+    
+    grouped_requests = {}
+    for r in requests_list:
+        if r.employee not in grouped_requests:
+            grouped_requests[r.employee] = []
+        grouped_requests[r.employee].append(r)
+
     return render_template('hr/profile_update_requests.html',
-                           requests=requests_list,
+                           grouped_requests=grouped_requests,
                            selected_status=status_filter)
 
 
@@ -1433,6 +1455,15 @@ def approve_profile_update(req_id):
         emp.bank_account = new_value
     elif field_name == 'pan_number':
         emp.pan_number = new_value.upper()
+    elif field_name == 'aadhar_number':
+        emp.aadhar_number = new_value
+    elif field_name == 'location':
+        emp.location = new_value
+    elif field_name == 'date_of_birth':
+        try:
+            emp.date_of_birth = datetime.strptime(new_value, '%Y-%m-%d').date()
+        except ValueError:
+            pass
 
     req_obj.status = 'Approved'
     req_obj.reviewed_by = current_user.id
@@ -1484,6 +1515,92 @@ def reject_profile_update(req_id):
 
     db.session.commit()
     flash('Profile update request rejected.', 'warning')
+    return redirect(url_for('hr.profile_update_requests'))
+
+
+@bp.route('/profile-update-requests/<int:emp_id>/approve-all', methods=['POST'])
+@module_required('hr')
+def approve_all_profile_updates(emp_id):
+    """Approve all pending profile update requests for an employee."""
+    emp = Employee.query.get_or_404(emp_id)
+    pending_requests = ProfileUpdateRequest.query.filter_by(employee_id=emp_id, status='Pending').all()
+    
+    if not pending_requests:
+        flash('No pending requests found for this employee.', 'warning')
+        return redirect(url_for('hr.profile_update_requests'))
+
+    for req_obj in pending_requests:
+        field_name = req_obj.field_name
+        new_value = req_obj.new_value
+
+        if field_name == 'full_name':
+            emp.user.full_name = new_value
+        elif field_name == 'phone':
+            emp.user.phone = new_value
+        elif field_name == 'bank_account':
+            emp.bank_account = new_value
+        elif field_name == 'pan_number':
+            emp.pan_number = new_value.upper()
+        elif field_name == 'aadhar_number':
+            emp.aadhar_number = new_value
+        elif field_name == 'location':
+            emp.location = new_value
+        elif field_name == 'date_of_birth':
+            try:
+                emp.date_of_birth = datetime.strptime(new_value, '%Y-%m-%d').date()
+            except ValueError:
+                pass
+
+        req_obj.status = 'Approved'
+        req_obj.reviewed_by = current_user.id
+        req_obj.reviewed_at = datetime.utcnow()
+        services.log_audit(current_user.id, 'APPROVE', 'ProfileUpdateRequest', req_obj.id,
+                          f'Approved {field_name} update for emp#{emp.id}', request.remote_addr or '')
+
+    notif = Notification(
+        user_id=emp.user_id,
+        title='Profile Updates Approved',
+        message=f'Your profile update requests have been approved and applied.',
+        category='success',
+        link='/employee/profile'
+    )
+    db.session.add(notif)
+    db.session.commit()
+    flash(f'All profile updates for {emp.user.full_name} approved and applied.', 'success')
+    return redirect(url_for('hr.profile_update_requests'))
+
+
+@bp.route('/profile-update-requests/<int:emp_id>/reject-all', methods=['POST'])
+@module_required('hr')
+def reject_all_profile_updates(emp_id):
+    """Reject all pending profile update requests for an employee."""
+    emp = Employee.query.get_or_404(emp_id)
+    pending_requests = ProfileUpdateRequest.query.filter_by(employee_id=emp_id, status='Pending').all()
+    
+    if not pending_requests:
+        flash('No pending requests found for this employee.', 'warning')
+        return redirect(url_for('hr.profile_update_requests'))
+
+    rejection_reason = request.form.get('reason', '').strip()
+
+    for req_obj in pending_requests:
+        req_obj.status = 'Rejected'
+        req_obj.reviewed_by = current_user.id
+        req_obj.reviewed_at = datetime.utcnow()
+        req_obj.rejection_reason = rejection_reason
+        services.log_audit(current_user.id, 'REJECT', 'ProfileUpdateRequest', req_obj.id,
+                          f'Rejected {req_obj.field_name} update', request.remote_addr or '')
+
+    notif = Notification(
+        user_id=emp.user_id,
+        title='Profile Updates Rejected',
+        message=f'Your profile update requests were rejected. {rejection_reason}',
+        category='warning',
+        link='/employee/profile'
+    )
+    db.session.add(notif)
+    db.session.commit()
+    flash(f'All profile updates for {emp.user.full_name} rejected.', 'warning')
     return redirect(url_for('hr.profile_update_requests'))
 
 

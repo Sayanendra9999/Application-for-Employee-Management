@@ -13,9 +13,8 @@ from app.extensions import db
 from app.models import LeavePolicy, Shift, AttendanceRegularization, Holiday
 from app.employee import services
 from app.employee.utils import get_current_employee_or_abort, logger
-from app.employee.forms import (ProfileForm, ProfileUpdateRequestForm,
-                                LeaveRequestForm, ExpenseClaimForm,
-                                TimesheetForm)
+from app.employee.forms import (LeaveRequestForm, ExpenseClaimForm, TimesheetForm,
+                                ProfileUpdateBatchForm)
 
 
 # ===========================================================================
@@ -56,6 +55,13 @@ def dashboard():
         'pending_hours': 0, 'rejected_count': 0
     }
 
+    # Manager: team pending count for dashboard card
+    team_pending = 0
+    team_size = 0
+    if employee and services.is_manager(employee.id):
+        team_pending = services.get_team_pending_count(employee.id)
+        team_size = len(services.get_direct_reports(employee.id))
+
     return render_template('employee/dashboard.html',
                            employee=employee,
                            profile_complete=profile_complete,
@@ -70,7 +76,9 @@ def dashboard():
                            tasks_done=tasks_done,
                            notifications=notifications,
                            unread_count=unread_count,
-                           ts_summary=ts_summary)
+                           ts_summary=ts_summary,
+                           team_pending=team_pending,
+                           team_size=team_size)
 
 
 # ===========================================================================
@@ -79,37 +87,27 @@ def dashboard():
 @bp.route('/profile', methods=['GET', 'POST'])
 @module_required('employee')
 def profile():
-    """View and update basic profile info."""
+    """View and update profile info via batch requests."""
     employee = current_user.employee
-    form = ProfileForm(obj=current_user)
+    form = ProfileUpdateBatchForm()
 
     if form.validate_on_submit():
-        current_user.full_name = form.full_name.data
-        current_user.phone = form.phone.data or ''
-        db.session.commit()
-        flash('Profile updated successfully.', 'success')
-        logger.info(f'Profile updated by {current_user.username}')
-        return redirect(url_for('employee.profile'))
-
-    update_requests = []
-    if employee:
-        update_requests = services.get_profile_update_requests(employee.id)
-
-    return render_template('employee/profile.html',
-                           form=form, employee=employee,
-                           update_requests=update_requests)
-
-
-@bp.route('/profile/update-request', methods=['GET', 'POST'])
-@module_required('employee')
-def profile_update_request():
-    """Submit a profile update request for HR approval."""
-    employee = get_current_employee_or_abort()
-    form = ProfileUpdateRequestForm()
-
-    if form.validate_on_submit():
+        if not employee:
+            flash('Employee profile not found.', 'danger')
+            return redirect(url_for('employee.dashboard'))
+            
+        updates_dict = {
+            'full_name': form.full_name.data,
+            'phone': form.phone.data,
+            'date_of_birth': form.date_of_birth.data.strftime('%Y-%m-%d') if form.date_of_birth.data else '',
+            'bank_account': form.bank_account.data,
+            'pan_number': form.pan_number.data,
+            'aadhar_number': form.aadhar_number.data,
+            'location': form.location.data
+        }
+        
         success, msg = services.submit_profile_update_request(
-            employee, form.field_name.data, form.new_value.data,
+            employee, updates_dict,
             ip=request.remote_addr or ''
         )
         if success:
@@ -118,9 +116,24 @@ def profile_update_request():
         else:
             flash(msg, 'danger')
         return redirect(url_for('employee.profile'))
+    
+    # Pre-populate form on GET
+    if request.method == 'GET' and employee:
+        form.full_name.data = current_user.full_name
+        form.phone.data = current_user.phone
+        form.date_of_birth.data = employee.date_of_birth
+        form.bank_account.data = employee.bank_account
+        form.pan_number.data = employee.pan_number
+        form.aadhar_number.data = employee.aadhar_number
+        form.location.data = employee.location
 
-    return render_template('employee/profile_update_request.html',
-                           form=form, employee=employee)
+    update_requests = []
+    if employee:
+        update_requests = services.get_profile_update_requests(employee.id)
+
+    return render_template('employee/profile.html',
+                           form=form, employee=employee,
+                           update_requests=update_requests)
 
 
 # ===========================================================================
@@ -222,12 +235,14 @@ def request_leave():
         if form.end_date.data < form.start_date.data:
             flash('End date cannot be before start date.', 'danger')
             return render_template('employee/leave_request.html',
-                                   form=form, leave_balances=leave_balances)
+                                   form=form, leave_balances=leave_balances,
+                                   reporting_manager=employee.reporting_manager)
 
         success, msg = services.submit_leave_request(
             employee, form.leave_type.data,
             form.start_date.data, form.end_date.data,
             reason=form.reason.data or '',
+            is_urgent=form.is_urgent.data,
             ip=request.remote_addr or ''
         )
         if success:
@@ -238,7 +253,8 @@ def request_leave():
             flash(msg, 'danger')
 
     return render_template('employee/leave_request.html',
-                           form=form, leave_balances=leave_balances)
+                           form=form, leave_balances=leave_balances,
+                           reporting_manager=employee.reporting_manager)
 
 
 # ===========================================================================
@@ -249,50 +265,9 @@ def request_leave():
 def payslips():
     """View salary records / payslips."""
     employee = get_current_employee_or_abort()
-    year_filter = request.args.get('year', '')
-    month_filter = request.args.getlist('month')
-    
-    # Remove empty string if 'All Months' or empty option was submitted
-    month_filter = [m for m in month_filter if m]
-    
-    records = services.get_my_salary_records(employee.id, year=year_filter or None, month=month_filter or None)
+    records = services.get_my_salary_records(employee.id)
     return render_template('employee/payslips.html',
-                           records=records, employee=employee,
-                           selected_year=year_filter,
-                           selected_month=month_filter)
-
-@bp.route('/payslips/export')
-@module_required('employee')
-def export_payslips():
-    """Export yearly payslips as CSV."""
-    import csv
-    from io import StringIO
-    from flask import Response
-    
-    employee = get_current_employee_or_abort()
-    year = request.args.get('year')
-    if not year:
-        flash('Year is required to export payslips.', 'danger')
-        return redirect(url_for('employee.payslips'))
-        
-    records = services.get_my_salary_records(employee.id, year=year)
-    
-    output = StringIO()
-    writer = csv.writer(output)
-    writer.writerow(['Month', 'Year', 'Basic', 'HRA', 'Deductions', 'Net Salary', 'Status'])
-    
-    for r in records:
-        writer.writerow([
-            r.month, r.year, 
-            r.basic, r.hra, r.deductions, 
-            r.net_salary, r.status
-        ])
-        
-    return Response(
-        output.getvalue(),
-        mimetype='text/csv',
-        headers={'Content-Disposition': f'attachment; filename=payslips_{year}.csv'}
-    )
+                           records=records, employee=employee)
 
 
 @bp.route('/payslips/<int:record_id>')
@@ -903,3 +878,71 @@ def holiday_calendar():
 
     return render_template('employee/holiday_calendar.html',
                            holidays=holidays, year=year)
+
+
+# ===========================================================================
+# MY TEAM — Manager Leave Approval
+# ===========================================================================
+@bp.route('/team')
+@module_required('employee')
+def my_team():
+    """Manager: View direct reports overview."""
+    employee = get_current_employee_or_abort()
+    if not services.is_manager(employee.id):
+        flash('You do not have any team members assigned to you.', 'info')
+        return redirect(url_for('employee.dashboard'))
+
+    reports = services.get_direct_reports(employee.id)
+    pending_count = services.get_team_pending_count(employee.id)
+    return render_template('employee/my_team.html',
+                           reports=reports, pending_count=pending_count)
+
+
+@bp.route('/team/leaves')
+@module_required('employee')
+def team_leaves():
+    """Manager: View and manage team leave requests."""
+    employee = get_current_employee_or_abort()
+    if not services.is_manager(employee.id):
+        flash('You do not have any team members assigned to you.', 'info')
+        return redirect(url_for('employee.dashboard'))
+
+    status_filter = request.args.get('status', '')
+    leaves = services.get_team_leaves(employee.id, status=status_filter or None)
+    pending_count = services.get_team_pending_count(employee.id)
+    return render_template('employee/team_leaves.html',
+                           leaves=leaves, pending_count=pending_count,
+                           selected_status=status_filter)
+
+
+@bp.route('/team/leaves/<int:leave_id>/approve', methods=['POST'])
+@module_required('employee')
+def team_approve_leave(leave_id):
+    """Manager: Approve a team member's leave."""
+    employee = get_current_employee_or_abort()
+    success, msg = services.manager_approve_leave(
+        leave_id, employee.id, ip=request.remote_addr or ''
+    )
+    if success:
+        db.session.commit()
+        flash(msg, 'success')
+    else:
+        flash(msg, 'danger')
+    return redirect(url_for('employee.team_leaves'))
+
+
+@bp.route('/team/leaves/<int:leave_id>/reject', methods=['POST'])
+@module_required('employee')
+def team_reject_leave(leave_id):
+    """Manager: Reject a team member's leave."""
+    employee = get_current_employee_or_abort()
+    reason = request.form.get('rejection_reason', '').strip()
+    success, msg = services.manager_reject_leave(
+        leave_id, employee.id, reason=reason, ip=request.remote_addr or ''
+    )
+    if success:
+        db.session.commit()
+        flash(msg, 'success')
+    else:
+        flash(msg, 'danger')
+    return redirect(url_for('employee.team_leaves'))

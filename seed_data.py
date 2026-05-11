@@ -173,47 +173,47 @@ def seed():
         users_data = [
             {'username': 'admin', 'email': 'admin@company.com',
              'full_name': 'System Admin', 'phone': '+91 99999 00001',
-             'password': 'admin123', 'is_admin': True,
+             'password': 'Admin@123', 'is_admin': True,
              'modules': ['admin', 'hr', 'pm', 'finance', 'employee']},
 
             {'username': 'hr_manager', 'email': 'hr@company.com',
              'full_name': 'Priya Sharma', 'phone': '+91 99999 00002',
-             'password': 'hr123', 'is_admin': False,
+             'password': 'Hr_manager@123', 'is_admin': False,
              'modules': ['hr', 'employee']},
 
             {'username': 'pm_lead', 'email': 'pm@company.com',
              'full_name': 'Rahul Verma', 'phone': '+91 99999 00003',
-             'password': 'pm123', 'is_admin': False,
+             'password': 'Pm_lead@123', 'is_admin': False,
              'modules': ['pm', 'employee']},
 
             {'username': 'finance_head', 'email': 'finance@company.com',
              'full_name': 'Anita Gupta', 'phone': '+91 99999 00004',
-             'password': 'fin123', 'is_admin': False,
+             'password': 'Finance_head@123', 'is_admin': False,
              'modules': ['finance', 'employee']},
 
             {'username': 'john_doe', 'email': 'john@company.com',
              'full_name': 'John Doe', 'phone': '+91 99999 00005',
-             'password': 'john123', 'is_admin': False,
+             'password': 'John_doe@123', 'is_admin': False,
              'modules': ['pm', 'employee']},
 
             {'username': 'jane_smith', 'email': 'jane@company.com',
              'full_name': 'Jane Smith', 'phone': '+91 99999 00006',
-             'password': 'jane123', 'is_admin': False,
+             'password': 'Jane_smith@123', 'is_admin': False,
              'modules': ['finance', 'employee']},
 
             {'username': 'bob_wilson', 'email': 'bob@company.com',
              'full_name': 'Bob Wilson', 'phone': '+91 99999 00007',
-             'password': 'bob123', 'is_admin': False,
+             'password': 'Bob_wilson@123', 'is_admin': False,
              'modules': ['hr', 'employee']},
 
             {'username': 'pm_manager_1', 'email': 'vikram@company.com',
              'full_name': 'Vikram Patel', 'phone': '+91 99999 00008',
-             'password': 'pm1_123', 'is_admin': False,
+             'password': 'Pm_manager_1@123', 'is_admin': False,
              'modules': ['pm', 'employee']},
 
             {'username': 'pm_manager_2', 'email': 'neha@company.com',
              'full_name': 'Neha Kapoor', 'phone': '+91 99999 00009',
-             'password': 'pm2_123', 'is_admin': False,
+             'password': 'Pm_manager_2@123', 'is_admin': False,
              'modules': ['pm', 'employee']},
         ]
 
@@ -292,7 +292,18 @@ def seed():
         emp_objects['jane_smith'].shift_id = shift_map['Afternoon'].id
         emp_objects['bob_wilson'].shift_id = shift_map['Night'].id
 
-        print("[OK] Employee records created (with shift assignments).")
+        # ── Reporting Manager Hierarchy ────────────────────────────────────
+        # Engineering: pm_lead (Tech Lead) manages john_doe, pm_manager_1, pm_manager_2
+        emp_objects['john_doe'].reporting_manager_id = emp_objects['pm_lead'].id
+        emp_objects['pm_manager_1'].reporting_manager_id = emp_objects['pm_lead'].id
+        emp_objects['pm_manager_2'].reporting_manager_id = emp_objects['pm_lead'].id
+        # HR: hr_manager manages bob_wilson
+        emp_objects['bob_wilson'].reporting_manager_id = emp_objects['hr_manager'].id
+        # Finance: finance_head manages jane_smith
+        emp_objects['jane_smith'].reporting_manager_id = emp_objects['finance_head'].id
+        # Senior employees (admin, hr_manager, pm_lead, finance_head) have NO manager → direct HR
+
+        print("[OK] Employee records created (with shift + reporting manager assignments).")
 
         # ── Leave Balances (initialized from policies) ───────────────────
         for emp_key, emp_obj in emp_objects.items():
@@ -313,23 +324,51 @@ def seed():
         db.session.flush()
         print("[OK] Leave balances initialized.")
 
-        # ── Leave requests ───────────────────────────────────────────────
+        # ── Leave requests (with multi-step approval workflow) ────────────
         leaves_data = [
+            # Approved leave: manager approved, then HR approved
             {'emp': 'john_doe', 'type': 'Casual Leave', 'start': date(2026, 4, 5),
              'end': date(2026, 4, 7), 'status': 'Approved', 'days': 3,
-             'reason': 'Family function', 'approved_by': 'hr_manager'},
+             'reason': 'Family function', 'approved_by': 'hr_manager',
+             'manager_status': 'Approved', 'manager_approved_by': 'pm_lead',
+             'hr_status': 'Approved', 'hr_approved_by': 'hr_manager'},
+            # Approved leave: manager approved, then HR approved
             {'emp': 'jane_smith', 'type': 'Sick Leave', 'start': date(2026, 4, 10),
              'end': date(2026, 4, 11), 'status': 'Approved', 'days': 2,
-             'reason': 'Not feeling well', 'approved_by': 'hr_manager'},
+             'reason': 'Not feeling well', 'approved_by': 'hr_manager',
+             'manager_status': 'Approved', 'manager_approved_by': 'finance_head',
+             'hr_status': 'Approved', 'hr_approved_by': 'hr_manager'},
+            # Pending leave: no manager (senior) → goes direct to HR
             {'emp': 'pm_lead', 'type': 'Earned Leave', 'start': date(2026, 4, 20),
              'end': date(2026, 4, 25), 'status': 'Pending', 'days': 4,
-             'reason': 'Vacation travel', 'approved_by': None},
+             'reason': 'Vacation travel', 'approved_by': None,
+             'manager_status': 'N/A', 'manager_approved_by': None,
+             'hr_status': 'Pending', 'hr_approved_by': None},
+            # Pending leave: has manager, awaiting manager step
             {'emp': 'bob_wilson', 'type': 'Casual Leave', 'start': date(2026, 4, 15),
              'end': date(2026, 4, 15), 'status': 'Pending', 'days': 1,
-             'reason': 'Personal errand', 'approved_by': None},
+             'reason': 'Personal errand', 'approved_by': None,
+             'manager_status': 'Pending', 'manager_approved_by': None,
+             'hr_status': 'Pending', 'hr_approved_by': None},
+            # Approved leave for senior (direct HR)
             {'emp': 'hr_manager', 'type': 'Sick Leave', 'start': date(2026, 3, 28),
              'end': date(2026, 3, 29), 'status': 'Approved', 'days': 2,
-             'reason': 'Doctor appointment', 'approved_by': 'admin'},
+             'reason': 'Doctor appointment', 'approved_by': 'admin',
+             'manager_status': 'N/A', 'manager_approved_by': None,
+             'hr_status': 'Approved', 'hr_approved_by': 'admin'},
+            # Manager-approved, awaiting HR (ready for HR final)
+            {'emp': 'pm_manager_1', 'type': 'Casual Leave', 'start': date(2026, 4, 28),
+             'end': date(2026, 4, 29), 'status': 'Pending', 'days': 2,
+             'reason': 'Family event', 'approved_by': None,
+             'manager_status': 'Approved', 'manager_approved_by': 'pm_lead',
+             'hr_status': 'Pending', 'hr_approved_by': None},
+            # Urgent leave: skips manager, direct to HR
+            {'emp': 'john_doe', 'type': 'Sick Leave', 'start': date(2026, 5, 5),
+             'end': date(2026, 5, 6), 'status': 'Pending', 'days': 2,
+             'reason': 'Medical emergency', 'approved_by': None,
+             'manager_status': 'N/A', 'manager_approved_by': None,
+             'hr_status': 'Pending', 'hr_approved_by': None,
+             'is_urgent': True},
         ]
 
         for ld in leaves_data:
@@ -341,11 +380,16 @@ def seed():
                 total_days=ld['days'],
                 status=ld['status'],
                 reason=ld['reason'],
-                approved_by=user_objects[ld['approved_by']].id if ld['approved_by'] else None
+                approved_by=user_objects[ld['approved_by']].id if ld['approved_by'] else None,
+                manager_status=ld.get('manager_status', 'Pending'),
+                manager_approved_by=user_objects[ld['manager_approved_by']].id if ld.get('manager_approved_by') else None,
+                hr_status=ld.get('hr_status', 'Pending'),
+                hr_approved_by=user_objects[ld['hr_approved_by']].id if ld.get('hr_approved_by') else None,
+                is_urgent=ld.get('is_urgent', False)
             )
             db.session.add(leave)
 
-        print("[OK] Leave requests created.")
+        print("[OK] Leave requests created (with manager/HR workflow states).")
 
         # ── Attendance records ───────────────────────────────────────────
         today = date.today()

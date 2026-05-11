@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS employees (
     department_id INTEGER REFERENCES departments(id),
     designation_id INTEGER REFERENCES designations(id),
     shift_id INTEGER REFERENCES shifts(id),
+    reporting_manager_id INTEGER REFERENCES employees(id),
     date_of_joining DATE,
     salary REAL DEFAULT 0,
     bank_account VARCHAR(30) DEFAULT '',
@@ -60,6 +61,9 @@ CREATE TABLE IF NOT EXISTS leaves (
     manager_approved_by INTEGER REFERENCES users(id),
     hr_status VARCHAR(20) DEFAULT 'Pending',
     hr_approved_by INTEGER REFERENCES users(id),
+    is_urgent BOOLEAN DEFAULT 0,
+    cancelled_at DATETIME,
+    cancelled_reason TEXT DEFAULT '',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

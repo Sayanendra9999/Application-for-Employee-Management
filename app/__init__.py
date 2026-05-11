@@ -105,8 +105,22 @@ def create_app(config_class=Config):
             employee_unread_count = Notification.query.filter_by(
                 user_id=current_user.id, is_read=False
             ).count()
+
+            # Manager status for sidebar "My Team" link
+            _is_manager = False
+            _team_pending_count = 0
+            if current_user.employee:
+                from app.employee.services import is_manager as _check_mgr
+                from app.employee.services import get_team_pending_count as _get_pending
+                _is_manager = _check_mgr(current_user.employee.id)
+                if _is_manager:
+                    _team_pending_count = _get_pending(current_user.employee.id)
+
             return dict(user_modules=user_modules,
-                        employee_unread_count=employee_unread_count)
-        return dict(user_modules=[], employee_unread_count=0)
+                        employee_unread_count=employee_unread_count,
+                        is_manager=_is_manager,
+                        team_pending_count=_team_pending_count)
+        return dict(user_modules=[], employee_unread_count=0,
+                    is_manager=False, team_pending_count=0)
 
     return app

@@ -30,13 +30,39 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for r in requests %}
-                        <tr>
-                            <td class="px-3 py-2">
-                                <strong>{{ r.employee.user.full_name }}</strong><br>
-                                <small class="text-muted">{{ r.employee.emp_code }}</small>
+                        {% for employee, reqs in grouped_requests.items() %}
+                        <!-- Employee Header Row -->
+                        <tr style="background-color: var(--bg-secondary);">
+                            <td colspan="6" class="px-3 py-2 fw-bold">
+                                <i class="fas fa-user-circle me-1"></i> {{ employee.user.full_name }} <span class="text-muted fw-normal">({{ employee.emp_code }})</span>
                             </td>
-                            <td class="px-3 py-2"><span class="badge bg-light text-dark">{{ r.field_name }}</span></td>
+                            <td class="px-3 py-2 text-end">
+                                {% set ns = namespace(has_pending=false) %}
+                                {% for r in reqs %}
+                                    {% if r.status == 'Pending' %}{% set ns.has_pending = true %}{% endif %}
+                                {% endfor %}
+                                
+                                {% if ns.has_pending %}
+                                <div class="d-flex gap-2 justify-content-end">
+                                    <form method="POST" action="{{ url_for('hr.approve_all_profile_updates', emp_id=employee.id) }}" style="display:inline;">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button class="btn btn-success btn-sm"><i class="fas fa-check-double me-1"></i>Approve All</button>
+                                    </form>
+                                    <form method="POST" action="{{ url_for('hr.reject_all_profile_updates', emp_id=employee.id) }}" style="display:inline;" onsubmit="var r=prompt('Reason for rejecting all requests:'); if(!r)return false; this.querySelector('[name=reason]').value=r;">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <input type="hidden" name="reason" value="">
+                                        <button class="btn btn-danger btn-sm"><i class="fas fa-times-circle me-1"></i>Reject All</button>
+                                    </form>
+                                </div>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        
+                        <!-- Individual Request Rows -->
+                        {% for r in reqs %}
+                        <tr>
+                            <td class="px-3 py-2 text-center text-muted"><i class="fas fa-arrow-right"></i></td>
+                            <td class="px-3 py-2"><span class="badge bg-light text-dark">{{ r.field_name|replace('_', ' ')|title }}</span></td>
                             <td class="px-3 py-2">{{ r.old_value or '—' }}</td>
                             <td class="px-3 py-2 fw-semibold text-primary">{{ r.new_value }}</td>
                             <td class="px-3 py-2">
@@ -45,17 +71,17 @@
                                 {% elif r.status == 'Rejected' %}<span class="badge bg-danger">Rejected</span>{% endif %}
                             </td>
                             <td class="px-3 py-2">{{ r.created_at.strftime('%d %b %Y') }}</td>
-                            <td class="px-3 py-2">
+                            <td class="px-3 py-2 text-end">
                                 {% if r.status == 'Pending' %}
-                                <div class="d-flex gap-1">
+                                <div class="d-flex gap-1 justify-content-end">
                                     <form method="POST" action="{{ url_for('hr.approve_profile_update', req_id=r.id) }}" style="display:inline;">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                        <button class="btn btn-success btn-sm" title="Approve"><i class="fas fa-check"></i></button>
+                                        <button class="btn btn-outline-success btn-sm" title="Approve"><i class="fas fa-check"></i></button>
                                     </form>
                                     <form method="POST" action="{{ url_for('hr.reject_profile_update', req_id=r.id) }}" style="display:inline;" onsubmit="var r=prompt('Rejection reason:'); if(!r)return false; this.querySelector('[name=reason]').value=r;">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <input type="hidden" name="reason" value="">
-                                        <button class="btn btn-danger btn-sm" title="Reject"><i class="fas fa-times"></i></button>
+                                        <button class="btn btn-outline-danger btn-sm" title="Reject"><i class="fas fa-times"></i></button>
                                     </form>
                                 </div>
                                 {% elif r.status == 'Rejected' %}
@@ -65,6 +91,7 @@
                                 {% endif %}
                             </td>
                         </tr>
+                        {% endfor %}
                         {% else %}
                         <tr><td colspan="7" class="text-center text-muted py-4">No profile update requests found.</td></tr>
                         {% endfor %}

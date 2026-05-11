@@ -47,6 +47,11 @@
                 <small class="text-muted">Leave as "General Shift" for default timing</small>
             </div>
             <div class="col-md-6">
+                {{ form.reporting_manager_id.label(class="form-label") }}
+                {{ form.reporting_manager_id(class="form-select") }}
+                <small class="text-muted">Leave requests go to this manager first. If empty, goes direct to HR.</small>
+            </div>
+            <div class="col-md-6">
                 {{ form.date_of_joining.label(class="form-label") }}
                 {{ form.date_of_joining(class="form-control", type="date") }}
             </div>
@@ -61,6 +66,18 @@
             <div class="col-md-6">
                 {{ form.pan_number.label(class="form-label") }}
                 {{ form.pan_number(class="form-control", placeholder="ABCDE1234F") }}
+            </div>
+            <div class="col-md-6">
+                {{ form.aadhar_number.label(class="form-label") }}
+                {{ form.aadhar_number(class="form-control", placeholder="123456789012") }}
+            </div>
+            <div class="col-md-6">
+                {{ form.date_of_birth.label(class="form-label") }}
+                {{ form.date_of_birth(class="form-control", type="date") }}
+            </div>
+            <div class="col-md-6">
+                {{ form.location.label(class="form-label") }}
+                {{ form.location(class="form-control", placeholder="City, State") }}
             </div>
         </div>
 

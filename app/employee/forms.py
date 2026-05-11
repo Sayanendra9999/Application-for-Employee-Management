@@ -3,25 +3,20 @@
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileField, FileAllowed
 from wtforms import (StringField, DateField, SelectField, TextAreaField,
-                     FloatField, SubmitField)
+                     FloatField, SubmitField, BooleanField)
 from wtforms.validators import DataRequired, Optional, Length, NumberRange
 
 
-class ProfileForm(FlaskForm):
-    """Basic profile update (direct fields)."""
-    full_name = StringField('Full Name', validators=[DataRequired(), Length(2, 150)])
+class ProfileUpdateBatchForm(FlaskForm):
+    """Batch request update for all profile fields (needs HR approval)."""
+    full_name = StringField('Full Name', validators=[Optional(), Length(2, 150)])
     phone = StringField('Phone', validators=[Optional(), Length(max=20)])
-    submit = SubmitField('Update Profile')
-
-
-class ProfileUpdateRequestForm(FlaskForm):
-    """Request update for sensitive fields (needs HR approval)."""
-    field_name = SelectField('Field to Update', choices=[
-        ('bank_account', 'Bank Account Number'),
-        ('pan_number', 'PAN Number'),
-    ], validators=[DataRequired()])
-    new_value = StringField('New Value', validators=[DataRequired(), Length(2, 250)])
-    submit = SubmitField('Submit Request')
+    date_of_birth = DateField('Date of Birth', validators=[Optional()])
+    bank_account = StringField('Bank Account Number', validators=[Optional(), Length(max=30)])
+    pan_number = StringField('PAN Number', validators=[Optional(), Length(max=15)])
+    aadhar_number = StringField('Aadhar Number', validators=[Optional(), Length(max=20)])
+    location = StringField('Location', validators=[Optional(), Length(max=100)])
+    submit = SubmitField('Submit Update Request')
 
 
 class LeaveRequestForm(FlaskForm):
@@ -30,6 +25,7 @@ class LeaveRequestForm(FlaskForm):
     start_date = DateField('Start Date', validators=[DataRequired()])
     end_date = DateField('End Date', validators=[DataRequired()])
     reason = TextAreaField('Reason', validators=[Optional(), Length(max=500)])
+    is_urgent = BooleanField('Mark as Urgent (skip manager, direct HR review)')
     submit = SubmitField('Submit Request')
 
 

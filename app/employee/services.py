@@ -33,45 +33,60 @@ def get_employee_profile(employee_id):
         return None
 
 
-def submit_profile_update_request(employee, field_name, new_value, ip=''):
-    """Submit a profile update request for HR approval.
+def submit_profile_update_request(employee, updates_dict, ip=''):
+    """Submit a batch profile update request for HR approval.
     Returns (success, message)."""
     try:
-        # Get current value
         field_map = {
+            'full_name': lambda: employee.user.full_name or '',
             'phone': lambda: employee.user.phone or '',
+            'date_of_birth': lambda: employee.date_of_birth.strftime('%Y-%m-%d') if employee.date_of_birth else '',
             'bank_account': lambda: employee.bank_account or '',
             'pan_number': lambda: employee.pan_number or '',
+            'aadhar_number': lambda: employee.aadhar_number or '',
+            'location': lambda: employee.location or '',
         }
 
-        if field_name not in field_map:
-            return False, f'Field "{field_name}" cannot be updated via self-service'
+        changes_made = False
+        batch_time = datetime.utcnow()
 
-        old_value = field_map[field_name]()
+        for field_name, new_value in updates_dict.items():
+            if field_name not in field_map:
+                continue
 
-        if old_value == new_value:
-            return False, 'New value is the same as current value'
+            old_value = field_map[field_name]()
+            
+            # Skip if value hasn't changed or if empty value submitted for optional field
+            if not new_value or str(old_value).strip() == str(new_value).strip():
+                continue
 
-        # Check for existing pending request for same field
-        existing = ProfileUpdateRequest.query.filter_by(
-            employee_id=employee.id, field_name=field_name, status='Pending'
-        ).first()
-        if existing:
-            return False, f'A pending request for {field_name} already exists'
+            # Check for existing pending request for same field and update it
+            existing = ProfileUpdateRequest.query.filter_by(
+                employee_id=employee.id, field_name=field_name, status='Pending'
+            ).first()
+            
+            if existing:
+                existing.new_value = new_value
+                existing.created_at = batch_time
+            else:
+                request_obj = ProfileUpdateRequest(
+                    employee_id=employee.id,
+                    field_name=field_name,
+                    old_value=old_value,
+                    new_value=new_value,
+                    status='Pending',
+                    created_at=batch_time
+                )
+                db.session.add(request_obj)
 
-        request_obj = ProfileUpdateRequest(
-            employee_id=employee.id,
-            field_name=field_name,
-            old_value=old_value,
-            new_value=new_value,
-            status='Pending'
-        )
-        db.session.add(request_obj)
+            changes_made = True
+            log_employee_action('SUBMIT', 'ProfileUpdateRequest', None,
+                              f'Requested {field_name} change to {new_value}', ip)
 
-        log_employee_action('SUBMIT', 'ProfileUpdateRequest', None,
-                          f'Requested {field_name} change', ip)
+        if not changes_made:
+            return False, 'No changes detected. Profile remains the same.'
 
-        # Notify HR users
+        # Notify HR users once for the batch
         from app.models import User, Module
         hr_module = Module.query.filter_by(slug='hr').first()
         if hr_module:
@@ -79,16 +94,16 @@ def submit_profile_update_request(employee, field_name, new_value, ip=''):
                 create_notification(
                     hr_user.id,
                     'Profile Update Request',
-                    f'{employee.user.full_name} requested to update {field_name}',
+                    f'{employee.user.full_name} requested profile updates.',
                     category='info',
                     link='/hr/employees'
                 )
 
-        logger.info(f'Profile update request submitted: emp#{employee.id} field={field_name}')
-        return True, 'Update request submitted for HR approval'
+        logger.info(f'Batch profile update request submitted: emp#{employee.id}')
+        return True, 'Profile update requests submitted for HR approval.'
     except Exception as e:
         logger.error(f'Error submitting profile update: {e}')
-        return False, 'An error occurred while submitting your request'
+        return False, 'An error occurred while submitting your request.'
 
 
 def get_profile_update_requests(employee_id):
@@ -197,8 +212,13 @@ def get_my_leaves(employee_id, status=None):
         return []
 
 
-def submit_leave_request(employee, leave_type, start_date, end_date, reason='', ip=''):
-    """Submit a new leave request. Returns (success, message)."""
+def submit_leave_request(employee, leave_type, start_date, end_date, reason='', is_urgent=False, ip=''):
+    """Submit a new leave request with manager/HR notification workflow.
+    - If employee has a reporting manager AND leave is NOT urgent:
+      manager_status='Pending', notify both Manager and HR.
+    - If employee has NO manager OR leave IS urgent:
+      manager_status='N/A', notify HR only (skip manager step).
+    Returns (success, message)."""
     try:
         from app.hr.services import validate_leave_request
         valid, msg = validate_leave_request(
@@ -207,13 +227,20 @@ def submit_leave_request(employee, leave_type, start_date, end_date, reason='', 
         if not valid:
             return False, msg
 
+        # Determine if manager step applies
+        has_manager = employee.reporting_manager_id is not None
+        skip_manager = is_urgent or not has_manager
+
         leave = Leave(
             employee_id=employee.id,
             leave_type=leave_type,
             start_date=start_date,
             end_date=end_date,
             reason=reason,
-            status='Pending'
+            status='Pending',
+            is_urgent=is_urgent,
+            manager_status='N/A' if skip_manager else 'Pending',
+            hr_status='Pending'
         )
         leave.total_days = leave.calc_days()
         db.session.add(leave)
@@ -221,6 +248,7 @@ def submit_leave_request(employee, leave_type, start_date, end_date, reason='', 
         log_employee_action('SUBMIT', 'Leave', None,
                           f'{leave_type}: {start_date} to {end_date} ({leave.total_days}d)', ip)
 
+        # --- NOTIFICATION: Employee confirmation ---
         create_notification(
             employee.user_id,
             'Leave Request Submitted',
@@ -229,28 +257,85 @@ def submit_leave_request(employee, leave_type, start_date, end_date, reason='', 
             link='/employee/leaves'
         )
 
-        logger.info(f'Leave request submitted: emp#{employee.id} {leave_type} {leave.total_days}d')
+        # --- NOTIFICATION: Manager (like "To" in email) ---
+        if has_manager and not is_urgent:
+            create_notification(
+                employee.manager_user_id,
+                'Leave Request from Team Member',
+                f'{employee.user.full_name} ({employee.emp_code}) has requested '
+                f'{leave_type} leave from {start_date.strftime("%d %b")} to '
+                f'{end_date.strftime("%d %b")} ({leave.total_days}d). '
+                f'Reason: {reason or "Not specified"}',
+                category='warning',
+                link='/employee/team/leaves'
+            )
+
+        # --- NOTIFICATION: HR (like "CC" in email) ---
+        from app.models import Module
+        hr_module = Module.query.filter_by(slug='hr').first()
+        if hr_module:
+            urgency_label = ' [URGENT]' if is_urgent else ''
+            for hr_user in hr_module.users:
+                create_notification(
+                    hr_user.id,
+                    f'Leave Request{urgency_label}',
+                    f'{employee.user.full_name} ({employee.emp_code}) applied for '
+                    f'{leave_type} leave ({leave.total_days}d). '
+                    f'{"Awaiting your direct review." if skip_manager else "Awaiting manager approval first."}',
+                    category='warning' if is_urgent else 'info',
+                    link='/hr/leaves'
+                )
+
+        # --- NOTIFICATION: Project Managers (FYI — no action required) ---
+        from app.models import Project, ProjectMember
+        # Find all active projects the employee is a member of
+        active_projects = db.session.query(Project).join(
+            ProjectMember, ProjectMember.project_id == Project.id
+        ).filter(
+            ProjectMember.user_id == employee.user_id,
+            Project.status.in_(['Not Started', 'In Progress']),
+            Project.assigned_pm.isnot(None)
+        ).all()
+
+        # Collect unique PM user IDs (skip duplicates and the reporting manager)
+        notified_pm_ids = set()
+        for proj in active_projects:
+            pm_user_id = proj.assigned_pm
+            # Skip if already notified, or if PM is the reporting manager (already got action notif)
+            if pm_user_id in notified_pm_ids:
+                continue
+            if has_manager and pm_user_id == employee.manager_user_id:
+                continue
+            notified_pm_ids.add(pm_user_id)
+            create_notification(
+                pm_user_id,
+                'Team Member Leave — FYI',
+                f'{employee.user.full_name} ({employee.emp_code}) has applied for '
+                f'{leave_type} leave from {start_date.strftime("%d %b")} to '
+                f'{end_date.strftime("%d %b")} ({leave.total_days}d). '
+                f'Project: {proj.name}. This is for your planning awareness — no action required.',
+                category='info',
+                link=None
+            )
+
+        logger.info(f'Leave request submitted: emp#{employee.id} {leave_type} {leave.total_days}d '
+                    f'urgent={is_urgent} skip_manager={skip_manager} pm_fyi={len(notified_pm_ids)}')
         return True, f'Leave request submitted ({leave.total_days} day(s))'
     except Exception as e:
         logger.error(f'Error submitting leave request: {e}')
         return False, 'An error occurred while submitting your leave request'
 
 
+
 # ===========================================================================
 # PAYSLIP SERVICES (Read-only from Finance)
 # ===========================================================================
-def get_my_salary_records(employee_id, year=None, month=None):
+def get_my_salary_records(employee_id):
     """Get all salary records for the employee."""
     try:
-        query = SalaryRecord.query.filter_by(employee_id=employee_id)
-        if year:
-            query = query.filter_by(year=int(year))
-        if month:
-            if isinstance(month, list):
-                query = query.filter(SalaryRecord.month.in_(month))
-            else:
-                query = query.filter_by(month=month)
-        return query.order_by(SalaryRecord.year.desc(), SalaryRecord.month.desc()).all()
+        return SalaryRecord.query.filter_by(
+            employee_id=employee_id
+        ).order_by(SalaryRecord.year.desc(), SalaryRecord.month.desc()).all()
     except Exception as e:
         logger.error(f'Error fetching salary records: {e}')
         return []
@@ -664,6 +749,9 @@ def submit_timesheet(employee, project_id, task_id, ts_date, hours, description,
             if not task:
                 return False, 'Selected task is not assigned to you in this project'
 
+            if ts_date < task.created_at.date():
+                return False, f'Cannot log hours before the task was created ({task.created_at.strftime("%d %b %Y")})'
+
         # Validate date is not in the future
         if ts_date > date.today():
             return False, 'Cannot log hours for future dates'
@@ -797,3 +885,167 @@ def get_weekly_timesheet_hours(employee_id):
         logger.error(f'Error fetching weekly hours: {e}')
         return 0
 
+
+# ===========================================================================
+# MY TEAM SERVICES (Manager leave approval)
+# ===========================================================================
+def get_direct_reports(employee_id):
+    """Get employees who report to this manager."""
+    try:
+        return Employee.query.filter_by(
+            reporting_manager_id=employee_id, is_active=True
+        ).all()
+    except Exception as e:
+        logger.error(f'Error fetching direct reports: {e}')
+        return []
+
+
+def is_manager(employee_id):
+    """Check if this employee has any direct reports."""
+    try:
+        return Employee.query.filter_by(
+            reporting_manager_id=employee_id, is_active=True
+        ).count() > 0
+    except Exception as e:
+        logger.error(f'Error checking manager status: {e}')
+        return False
+
+
+def get_team_leaves(employee_id, status=None):
+    """Get leave requests from direct reports.
+    If status='manager_pending', returns only leaves awaiting manager action."""
+    try:
+        report_ids = [r.id for r in get_direct_reports(employee_id)]
+        if not report_ids:
+            return []
+        query = Leave.query.filter(Leave.employee_id.in_(report_ids))
+        if status == 'manager_pending':
+            query = query.filter(
+                Leave.manager_status == 'Pending',
+                Leave.status == 'Pending'
+            )
+        elif status:
+            query = query.filter_by(status=status)
+        return query.order_by(Leave.created_at.desc()).all()
+    except Exception as e:
+        logger.error(f'Error fetching team leaves: {e}')
+        return []
+
+
+def get_team_pending_count(employee_id):
+    """Count pending leaves from direct reports awaiting manager action."""
+    try:
+        report_ids = [r.id for r in get_direct_reports(employee_id)]
+        if not report_ids:
+            return 0
+        return Leave.query.filter(
+            Leave.employee_id.in_(report_ids),
+            Leave.manager_status == 'Pending',
+            Leave.status == 'Pending'
+        ).count()
+    except Exception as e:
+        logger.error(f'Error counting team pending leaves: {e}')
+        return 0
+
+
+def manager_approve_leave(leave_id, manager_employee_id, ip=''):
+    """Manager approves a direct report's leave.
+    Sets manager_status='Approved'. Leave stays 'Pending' until HR approves.
+    Returns (success, message)."""
+    try:
+        leave = Leave.query.get(leave_id)
+        if not leave:
+            return False, 'Leave request not found.'
+        if leave.status != 'Pending':
+            return False, f'Leave is already {leave.status}.'
+        if leave.manager_status != 'Pending':
+            return False, 'This leave is not awaiting manager approval.'
+
+        # Verify the manager actually manages this employee
+        emp = Employee.query.get(leave.employee_id)
+        if not emp or emp.reporting_manager_id != manager_employee_id:
+            return False, 'You are not authorized to approve this leave.'
+
+        manager = Employee.query.get(manager_employee_id)
+        leave.manager_status = 'Approved'
+        leave.manager_approved_by = manager.user_id
+
+        log_employee_action('MANAGER_APPROVE', 'Leave', leave.id,
+                          f'Manager approved leave #{leave.id} for emp#{emp.emp_code}', ip)
+
+        # Notify employee that manager approved
+        create_notification(
+            emp.user_id,
+            'Leave Approved by Manager',
+            f'Your {leave.leave_type} request ({leave.total_days}d) '
+            f'has been approved by {manager.user.full_name}. Awaiting HR final approval.',
+            category='success',
+            link='/employee/leaves'
+        )
+
+        # Notify HR that manager has approved — ready for final approval
+        from app.models import Module
+        hr_module = Module.query.filter_by(slug='hr').first()
+        if hr_module:
+            for hr_user in hr_module.users:
+                create_notification(
+                    hr_user.id,
+                    'Manager Approved — Awaiting HR',
+                    f'{manager.user.full_name} approved {emp.user.full_name}\'s '
+                    f'{leave.leave_type} leave ({leave.total_days}d). Ready for HR final approval.',
+                    category='warning',
+                    link='/hr/leaves'
+                )
+
+        logger.info(f'Leave #{leave.id} manager-approved by emp#{manager_employee_id}')
+        return True, 'Leave approved by manager. Awaiting HR final approval.'
+    except Exception as e:
+        logger.error(f'Error in manager approve leave: {e}')
+        return False, 'An error occurred while approving the leave.'
+
+
+def manager_reject_leave(leave_id, manager_employee_id, reason='', ip=''):
+    """Manager rejects a direct report's leave.
+    Sets manager_status='Rejected' and overall status='Rejected'.
+    Returns (success, message)."""
+    try:
+        leave = Leave.query.get(leave_id)
+        if not leave:
+            return False, 'Leave request not found.'
+        if leave.status != 'Pending':
+            return False, f'Leave is already {leave.status}.'
+        if leave.manager_status != 'Pending':
+            return False, 'This leave is not awaiting manager approval.'
+
+        # Verify authorization
+        emp = Employee.query.get(leave.employee_id)
+        if not emp or emp.reporting_manager_id != manager_employee_id:
+            return False, 'You are not authorized to reject this leave.'
+
+        manager = Employee.query.get(manager_employee_id)
+        leave.manager_status = 'Rejected'
+        leave.manager_approved_by = manager.user_id
+        leave.status = 'Rejected'
+        leave.rejection_reason = reason
+        leave.hr_status = 'N/A'  # Manager rejected, HR step skipped
+
+        log_employee_action('MANAGER_REJECT', 'Leave', leave.id,
+                          f'Manager rejected leave #{leave.id}: {reason}', ip)
+
+        # Notify employee
+        reason_text = f' Reason: {reason}' if reason else ''
+        create_notification(
+            emp.user_id,
+            'Leave Rejected by Manager',
+            f'Your {leave.leave_type} request ({leave.total_days}d) '
+            f'has been rejected by {manager.user.full_name}.{reason_text} '
+            f'You can resubmit as urgent if needed.',
+            category='danger',
+            link='/employee/leaves'
+        )
+
+        logger.info(f'Leave #{leave.id} manager-rejected by emp#{manager_employee_id}')
+        return True, 'Leave rejected by manager.'
+    except Exception as e:
+        logger.error(f'Error in manager reject leave: {e}')
+        return False, 'An error occurred while rejecting the leave.'

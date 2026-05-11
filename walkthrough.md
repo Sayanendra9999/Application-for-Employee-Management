@@ -84,11 +84,6 @@ python app.py
 | `bob_wilson` | `Bob_wilson@123` | HR Staff | HR, Employee |
 | `pm_manager_1` | `Pm_manager_1@123` | Project Manager | PM, Employee |
 | `pm_manager_2` | `Pm_manager_2@123` | Project Manager | PM, Employee |
-| `Allavarapu` | `Allavarapu@123` | **Admin (superuser)** | Admin, HR, PM, Finance, Employee |
-| `Vamshi` | `Vamshi@123` | HR Staff | HR, Employee |
-| `Reddy` | `Reddy@123` | Employee | Employee |
-| `SAI` | `Sai@123` | Employee | Employee |
-| `SHEKHAR` | `Shekhar@123` | Employee | Employee |
 
 ---
 

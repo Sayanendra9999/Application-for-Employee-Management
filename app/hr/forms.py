@@ -15,10 +15,14 @@ class EmployeeForm(FlaskForm):
     department_id = SelectField('Department', coerce=int, validators=[DataRequired()])
     designation_id = SelectField('Designation', coerce=int, validators=[DataRequired()])
     shift_id = SelectField('Assigned Shift', coerce=int, validators=[Optional()])
+    reporting_manager_id = SelectField('Reporting Manager', coerce=int, validators=[Optional()])
+    date_of_birth = DateField('Date of Birth', validators=[Optional()])
     date_of_joining = DateField('Date of Joining', validators=[Optional()])
     salary = FloatField('Monthly Salary (₹)', validators=[Optional()])
     bank_account = StringField('Bank Account', validators=[Optional(), Length(0, 30)])
     pan_number = StringField('PAN Number', validators=[Optional(), Length(0, 15)])
+    aadhar_number = StringField('Aadhar Number', validators=[Optional(), Length(0, 20)])
+    location = StringField('Location', validators=[Optional(), Length(0, 100)])
     submit = SubmitField('Save')
 
 

@@ -48,12 +48,26 @@
             </thead>
             <tbody>
                 {% for leave in leaves.items %}
-                <tr>
-                    <td class="fw-semibold">
-                        {{ leave.employee.user.full_name }}
-                        <br><small style="color:var(--text-secondary);">{{ leave.employee.emp_code }} · {{ leave.employee.shift_name }}</small>
+                <tr{% if leave.status == 'Pending' and leave.manager_status == 'Approved' %} style="background:rgba(16,185,129,0.04);"{% endif %}>
+                    <td>
+                        <div class="fw-semibold">{{ leave.employee.user.full_name }}</div>
+                        <small style="color:var(--text-secondary);">{{ leave.employee.emp_code }} · {{ leave.employee.department_name }}</small>
+                        {% if leave.employee.reporting_manager %}
+                        <br><small style="color:var(--text-secondary); font-size:0.72rem;">
+                            <i class="fas fa-user-tie me-1"></i>Mgr: {{ leave.employee.reporting_manager.user.full_name }}
+                        </small>
+                        {% else %}
+                        <br><small style="color:#94a3b8; font-size:0.72rem;">
+                            <i class="fas fa-minus-circle me-1"></i>No manager (direct HR)
+                        </small>
+                        {% endif %}
                     </td>
-                    <td>{{ leave.leave_type }}</td>
+                    <td>
+                        {{ leave.leave_type }}
+                        {% if leave.is_urgent %}
+                        <br><span class="badge bg-danger" style="font-size:0.6rem;">URGENT</span>
+                        {% endif %}
+                    </td>
                     <td>{{ leave.start_date.strftime('%d %b %Y') }}</td>
                     <td>{{ leave.end_date.strftime('%d %b %Y') }}</td>
                     <td><strong>{{ leave.total_days or leave.calc_days() }}</strong></td>
@@ -63,23 +77,46 @@
                     <!-- Manager Status -->
                     <td>
                         {% if leave.manager_status == 'Approved' %}
-                        <span class="badge-status badge-approved" title="{{ leave.manager_approver.full_name if leave.manager_approver else '' }}">✓</span>
+                        <span class="badge-status badge-approved" style="font-size:0.7rem;">
+                            <i class="fas fa-check me-1"></i>Approved
+                        </span>
+                        {% if leave.manager_approver %}
+                        <br><small style="color:var(--text-secondary); font-size:0.7rem;">by {{ leave.manager_approver.full_name }}</small>
+                        {% endif %}
                         {% elif leave.manager_status == 'Rejected' %}
-                        <span class="badge-status badge-rejected">✗</span>
+                        <span class="badge-status badge-rejected" style="font-size:0.7rem;">
+                            <i class="fas fa-times me-1"></i>Rejected
+                        </span>
+                        {% if leave.manager_approver %}
+                        <br><small style="color:var(--text-secondary); font-size:0.7rem;">by {{ leave.manager_approver.full_name }}</small>
+                        {% endif %}
                         {% elif leave.manager_status == 'N/A' %}
-                        <span style="color:var(--text-secondary); font-size:0.75rem;">N/A</span>
+                        <span style="color:#94a3b8; font-size:0.75rem;">N/A</span>
                         {% else %}
-                        <span class="badge-status" style="background:#fef3c7; color:#92400e; font-size:0.7rem;">Pending</span>
+                        <span class="badge-status" style="background:#fef3c7; color:#92400e; font-size:0.7rem;">
+                            <i class="fas fa-clock me-1"></i>Pending
+                        </span>
                         {% endif %}
                     </td>
                     <!-- HR Status -->
                     <td>
                         {% if leave.hr_status == 'Approved' %}
-                        <span class="badge-status badge-approved" title="{{ leave.hr_approver.full_name if leave.hr_approver else '' }}">✓</span>
+                        <span class="badge-status badge-approved" style="font-size:0.7rem;">
+                            <i class="fas fa-check me-1"></i>Approved
+                        </span>
+                        {% if leave.hr_approver %}
+                        <br><small style="color:var(--text-secondary); font-size:0.7rem;">by {{ leave.hr_approver.full_name }}</small>
+                        {% endif %}
                         {% elif leave.hr_status == 'Rejected' %}
-                        <span class="badge-status badge-rejected">✗</span>
+                        <span class="badge-status badge-rejected" style="font-size:0.7rem;">
+                            <i class="fas fa-times me-1"></i>Rejected
+                        </span>
+                        {% elif leave.hr_status == 'N/A' %}
+                        <span style="color:#94a3b8; font-size:0.75rem;">N/A</span>
                         {% else %}
-                        <span class="badge-status" style="background:#fef3c7; color:#92400e; font-size:0.7rem;">Pending</span>
+                        <span class="badge-status" style="background:#fef3c7; color:#92400e; font-size:0.7rem;">
+                            <i class="fas fa-clock me-1"></i>Pending
+                        </span>
                         {% endif %}
                     </td>
                     <!-- Final Status -->
@@ -90,6 +127,8 @@
                         <span class="badge-status badge-approved">Approved</span>
                         {% elif leave.status == 'Rejected' %}
                         <span class="badge-status badge-rejected">Rejected</span>
+                        {% elif leave.status == 'Cancelled' %}
+                        <span class="badge-status" style="background:#f1f5f9; color:#64748b;">Cancelled</span>
                         {% endif %}
                     </td>
                     <td>
@@ -97,7 +136,7 @@
                         <form method="POST" action="{{ url_for('hr.leave_action', leave_id=leave.id) }}" class="d-inline">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <input type="hidden" name="status" value="Approved">
-                            <button type="submit" class="btn-action" title="Approve (HR)" style="color:var(--success);">
+                            <button type="submit" class="btn-action" title="Approve (HR Final)" style="color:var(--success);">
                                 <i class="fas fa-check"></i>
                             </button>
                         </form>
@@ -109,6 +148,11 @@
                                 <i class="fas fa-times"></i>
                             </button>
                         </form>
+                        {% if leave.manager_status == 'Approved' %}
+                        <br><small style="color:#059669; font-size:0.68rem;"><i class="fas fa-check-double me-1"></i>Manager OK</small>
+                        {% elif leave.manager_status == 'Pending' and leave.manager_status != 'N/A' %}
+                        <br><small style="color:#f59e0b; font-size:0.68rem;"><i class="fas fa-hourglass-half me-1"></i>Mgr pending</small>
+                        {% endif %}
                         {% else %}
                         <span style="font-size:0.75rem; color:var(--text-secondary);">
                             {% if leave.approver %}by {{ leave.approver.full_name }}{% endif %}

@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block title %}Team Leaves — Enterprise Portal{% endblock %}
+{% block page_title %}Team Leave Requests{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+    <div>
+        <h4 style="font-weight:700;"><i class="fas fa-calendar-check me-2" style="color:var(--primary);"></i>Team Leave Requests</h4>
+        <p style="color:var(--text-secondary); font-size:0.85rem; margin:0;">
+            {{ leaves|length }} request{{ 's' if leaves|length != 1 else '' }}
+            {% if pending_count > 0 %}
+            · <span style="color:#f59e0b; font-weight:600;">{{ pending_count }} awaiting your approval</span>
+            {% endif %}
+        </p>
+    </div>
+    <div>
+        <a href="{{ url_for('employee.my_team') }}" class="btn btn-outline-primary btn-sm">
+            <i class="fas fa-arrow-left me-1"></i>Back to Team
+        </a>
+    </div>
+</div>
+
+<!-- Status Filter -->
+<div class="mb-3">
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="{{ url_for('employee.team_leaves') }}" class="btn btn-sm {% if not selected_status %}btn-primary{% else %}btn-outline-primary{% endif %}">All</a>
+        <a href="{{ url_for('employee.team_leaves', status='manager_pending') }}" class="btn btn-sm {% if selected_status == 'manager_pending' %}btn-warning{% else %}btn-outline-warning{% endif %}">
+            <i class="fas fa-clock me-1"></i>Needs My Action
+            {% if pending_count > 0 %}<span class="badge bg-dark ms-1">{{ pending_count }}</span>{% endif %}
+        </a>
+        <a href="{{ url_for('employee.team_leaves', status='Pending') }}" class="btn btn-sm {% if selected_status == 'Pending' %}btn-primary{% else %}btn-outline-primary{% endif %}">Pending</a>
+        <a href="{{ url_for('employee.team_leaves', status='Approved') }}" class="btn btn-sm {% if selected_status == 'Approved' %}btn-primary{% else %}btn-outline-primary{% endif %}">Approved</a>
+        <a href="{{ url_for('employee.team_leaves', status='Rejected') }}" class="btn btn-sm {% if selected_status == 'Rejected' %}btn-primary{% else %}btn-outline-primary{% endif %}">Rejected</a>
+    </div>
+</div>
+
+<div class="data-card">
+    <div class="table-responsive">
+        <table class="table" id="team-leaves-table">
+            <thead>
+                <tr>
+                    <th>Employee</th>
+                    <th>Type</th>
+                    <th>From</th>
+                    <th>To</th>
+                    <th>Days</th>
+                    <th>Reason</th>
+                    <th>Manager</th>
+                    <th>HR</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for leave in leaves %}
+                <tr>
+                    <td>
+                        <div class="d-flex align-items-center gap-2">
+                            <div style="width:32px; height:32px; background:linear-gradient(135deg,#6366f1,#4f46e5); border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                                <span style="color:#fff; font-size:0.7rem; font-weight:700;">{{ leave.employee.user.full_name[:2] | upper }}</span>
+                            </div>
+                            <div>
+                                <div style="font-weight:600; font-size:0.85rem;">{{ leave.employee.user.full_name }}</div>
+                                <div style="font-size:0.72rem; color:var(--text-secondary);">{{ leave.employee.emp_code }}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="fw-semibold">
+                        {{ leave.leave_type }}
+                        {% if leave.is_urgent %}
+                        <span class="badge bg-danger" style="font-size:0.6rem; vertical-align:middle;">URGENT</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ leave.start_date.strftime('%d %b %Y') }}</td>
+                    <td>{{ leave.end_date.strftime('%d %b %Y') }}</td>
+                    <td>{{ leave.total_days }}</td>
+                    <td style="max-width:160px; font-size:0.83rem;">{{ leave.reason[:50] }}{% if leave.reason|length > 50 %}…{% endif %}</td>
+                    <td>
+                        {% if leave.manager_status == 'Approved' %}
+                        <span class="badge-status badge-approved" title="{{ leave.manager_approver.full_name if leave.manager_approver else '' }}">
+                            <i class="fas fa-check me-1"></i>Approved
+                        </span>
+                        {% elif leave.manager_status == 'Rejected' %}
+                        <span class="badge-status badge-rejected">
+                            <i class="fas fa-times me-1"></i>Rejected
+                        </span>
+                        {% elif leave.manager_status == 'N/A' %}
+                        <span class="badge-status" style="background:#f1f5f9; color:#64748b;">N/A</span>
+                        {% else %}
+                        <span class="badge-status badge-pending">
+                            <i class="fas fa-clock me-1"></i>Pending
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if leave.hr_status == 'Approved' %}
+                        <span class="badge-status badge-approved"><i class="fas fa-check me-1"></i>Approved</span>
+                        {% elif leave.hr_status == 'Rejected' %}
+                        <span class="badge-status badge-rejected"><i class="fas fa-times me-1"></i>Rejected</span>
+                        {% elif leave.hr_status == 'N/A' %}
+                        <span class="badge-status" style="background:#f1f5f9; color:#64748b;">N/A</span>
+                        {% else %}
+                        <span class="badge-status badge-pending"><i class="fas fa-clock me-1"></i>Pending</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="badge-status badge-{{ leave.status|lower }}">{{ leave.status }}</span></td>
+                    <td>
+                        {% if leave.manager_status == 'Pending' and leave.status == 'Pending' %}
+                        <div class="d-flex gap-1">
+                            <!-- Approve Button -->
+                            <form method="POST" action="{{ url_for('employee.team_approve_leave', leave_id=leave.id) }}" style="display:inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-success btn-sm" title="Approve"
+                                    onclick="return confirm('Approve {{ leave.employee.user.full_name }}\'s {{ leave.leave_type }} leave ({{ leave.total_days }}d)?')">
+                                    <i class="fas fa-check"></i>
+                                </button>
+                            </form>
+                            <!-- Reject Button -->
+                            <form method="POST" action="{{ url_for('employee.team_reject_leave', leave_id=leave.id) }}" style="display:inline;"
+                                onsubmit="var r=prompt('Rejection reason for {{ leave.employee.user.full_name }}:'); if(r===null)return false; this.querySelector('[name=rejection_reason]').value=r;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="rejection_reason" value="">
+                                <button type="submit" class="btn btn-danger btn-sm" title="Reject">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </form>
+                        </div>
+                        {% elif leave.manager_status == 'Approved' and leave.status == 'Pending' %}
+                        <span style="font-size:0.78rem; color:#059669;"><i class="fas fa-hourglass-half me-1"></i>Awaiting HR</span>
+                        {% elif leave.rejection_reason %}
+                        <span style="font-size:0.75rem; color:var(--text-secondary);" title="{{ leave.rejection_reason }}">
+                            <i class="fas fa-comment-dots me-1"></i>{{ leave.rejection_reason[:30] }}{% if leave.rejection_reason|length > 30 %}…{% endif %}
+                        </span>
+                        {% else %}
+                        <span style="font-size:0.78rem; color:var(--text-secondary);">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="10" class="text-center py-4" style="color:var(--text-secondary);">
+                        <i class="fas fa-calendar-check" style="font-size:1.5rem; opacity:0.3; margin-bottom:8px; display:block;"></i>
+                        No leave requests found
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Workflow Legend -->
+<div style="margin-top:20px; padding:16px 20px; background:var(--bg-card); border:1px solid var(--border-color); border-radius:10px;">
+    <h6 style="font-weight:600; font-size:0.85rem; margin-bottom:10px;"><i class="fas fa-info-circle me-1" style="color:var(--primary);"></i>Approval Workflow</h6>
+    <div style="font-size:0.8rem; color:var(--text-secondary); line-height:1.8;">
+        <div><i class="fas fa-arrow-right me-1" style="color:#6366f1;"></i><strong>Step 1:</strong> Employee submits leave → You (Manager) receive notification</div>
+        <div><i class="fas fa-arrow-right me-1" style="color:#10b981;"></i><strong>Step 2:</strong> You approve → HR receives notification for final approval</div>
+        <div><i class="fas fa-arrow-right me-1" style="color:#f59e0b;"></i><strong>Urgent:</strong> If marked urgent, leave goes directly to HR (skips manager step)</div>
+        <div><i class="fas fa-arrow-right me-1" style="color:#ef4444;"></i><strong>Rejection:</strong> Manager rejection is final. Employee can resubmit as urgent if needed.</div>
+    </div>
+</div>
+{% endblock %}

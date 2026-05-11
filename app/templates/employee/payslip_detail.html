@@ -3,253 +3,49 @@
 {% block page_title %}Payslip Detail{% endblock %}
 
 {% block content %}
-<div class="mb-3 d-print-none">
+<div class="mb-3">
     <a href="{{ url_for('employee.payslips') }}" class="btn btn-outline-primary btn-sm">
         <i class="fas fa-arrow-left me-1"></i>Back to Payslips
     </a>
-    <button onclick="window.print()" class="btn btn-primary btn-sm ms-2">
-        <i class="fas fa-print me-1"></i>Print Payslip
-    </button>
 </div>
 
-<style>
-    @media print {
-        body * {
-            visibility: hidden;
-        }
-        #payslip-print-area, #payslip-print-area * {
-            visibility: visible;
-        }
-        #payslip-print-area {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            margin: 0;
-            padding: 0;
-        }
-        .main-content {
-            padding: 0 !important;
-            margin: 0 !important;
-        }
-        .navbar, .sidebar {
-            display: none !important;
-        }
-    }
+<div class="form-card" style="max-width:700px;">
+    <div class="text-center mb-4">
+        <h5 class="fw-bold">Payslip — {{ record.month }} {{ record.year }}</h5>
+        <p style="color:var(--text-secondary); font-size:0.85rem;">{{ employee.user.full_name }} ({{ employee.emp_code }})</p>
+        <span class="badge-status badge-{{ record.status|lower }}">{{ record.status }}</span>
+    </div>
 
-    .payslip-container {
-        border: 1px solid #000;
-        background: #fff;
-        color: #000;
-        font-family: 'Times New Roman', Times, serif;
-        padding: 30px;
-        max-width: 950px;
-        margin: 0 auto;
-        box-sizing: border-box;
-    }
-    .payslip-header {
-        text-align: center;
-        margin-bottom: 20px;
-        position: relative;
-    }
-    .payslip-header h2 {
-        font-weight: bold;
-        margin: 0;
-        font-size: 26px;
-        color: #000;
-    }
-    .payslip-header p {
-        margin: 0;
-        font-size: 15px;
-    }
-    .payslip-title {
-        text-align: center;
-        font-weight: bold;
-        font-size: 18px;
-        margin-top: 15px;
-        margin-bottom: 20px;
-    }
-    .payslip-logo {
-        position: absolute;
-        top: 0;
-        right: 0;
-        font-size: 32px;
-        font-weight: bold;
-        font-family: Arial, sans-serif;
-    }
-    .payslip-logo span {
-        color: #e74c3c;
-    }
-    .info-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px 30px;
-        margin-bottom: 25px;
-        font-size: 14px;
-    }
-    .info-row {
-        display: flex;
-    }
-    .info-label {
-        width: 180px;
-    }
-    .info-value {
-        font-weight: normal;
-        flex: 1;
-    }
-    .payslip-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 14px;
-    }
-    .payslip-table th, .payslip-table td {
-        padding: 4px 8px;
-    }
-    .payslip-table th {
-        font-weight: bold;
-        text-align: left;
-    }
-    .border-top-btm {
-        border-top: 1px solid #000;
-        border-bottom: 1px solid #000;
-    }
-    .border-btm {
-        border-bottom: 1px solid #000;
-    }
-    .border-right {
-        border-right: 1px solid #000;
-    }
-    .text-right {
-        text-align: right;
-    }
-    .signature-area {
-        display: flex;
-        justify-content: space-between;
-        margin-top: 70px;
-        font-size: 14px;
-    }
-    .signature-line {
-        border-top: 1px solid #000;
-        width: 250px;
-        padding-top: 5px;
-        text-align: left;
-    }
-</style>
+    <hr>
 
-<div id="payslip-print-area">
-    <div class="payslip-container">
-        <div class="payslip-header">
-            <h2>Lenvica Computer Solutions Pvt Ltd</h2>
-            <p>Novel Business Center, #10, BTM 1st Stage</p>
-            <div class="payslip-logo">
-                len<span>v</span>ica
-            </div>
-            <div class="payslip-title">
-                Payslip for the period of {{ record.month }} {{ record.year }}
-            </div>
-        </div>
+    <div class="row g-3 mb-3" style="font-size:0.9rem;">
+        <div class="col-6"><strong>Employee:</strong> {{ employee.user.full_name }}</div>
+        <div class="col-6"><strong>Code:</strong> {{ employee.emp_code }}</div>
+        <div class="col-6"><strong>Department:</strong> {{ employee.department_name }}</div>
+        <div class="col-6"><strong>Designation:</strong> {{ employee.designation_title }}</div>
+    </div>
 
-        <div class="info-grid">
-            <div class="info-row"><div class="info-label">Employee Id</div><div class="info-value">: {{ employee.emp_code }}</div></div>
-            <div class="info-row"><div class="info-label">Name</div><div class="info-value">: {{ employee.user.full_name }}</div></div>
-            
-            <div class="info-row"><div class="info-label">Department</div><div class="info-value">: {{ employee.department_name }}</div></div>
-            <div class="info-row"><div class="info-label">Designation</div><div class="info-value">: {{ employee.designation_title }}</div></div>
-            
-            <div class="info-row"><div class="info-label">Days Worked</div><div class="info-value">: 22.0</div></div>
-            <div class="info-row"><div class="info-label">Bank Acct/Cheque Number</div><div class="info-value">: {{ employee.bank_account or '—' }}</div></div>
-            
-            <div class="info-row"><div class="info-label">Casual Leave</div><div class="info-value">: 0.0 (Op: 4.0 Cl: 4.0)</div></div>
-            <div class="info-row"><div class="info-label">Earned Leave</div><div class="info-value">: 0.0 (Op: 5.0 Cl: 5.0)</div></div>
-            
-            <div class="info-row"><div class="info-label">Overtime Hours</div><div class="info-value">: 0.00</div></div>
-        </div>
+    <hr>
 
-        {% set months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'] %}
-        {% set month_idx = months.index(record.month) + 1 if record.month in months else 5 %}
+    <table class="table" style="font-size:0.9rem;">
+        <tbody>
+            <tr><td class="fw-semibold">Basic Pay</td><td class="text-end">₹{{ '{:,.0f}'.format(record.basic) }}</td></tr>
+            <tr><td class="fw-semibold">HRA</td><td class="text-end">₹{{ '{:,.0f}'.format(record.hra) }}</td></tr>
+            <tr class="text-danger"><td class="fw-semibold">Deductions</td><td class="text-end">- ₹{{ '{:,.0f}'.format(record.deductions) }}</td></tr>
+        </tbody>
+        <tfoot>
+            <tr style="border-top:2px solid var(--text-primary);">
+                <td class="fw-bold" style="font-size:1.05rem;">Net Salary</td>
+                <td class="text-end fw-bold" style="font-size:1.05rem; color:var(--success);">₹{{ '{:,.0f}'.format(record.net_salary) }}</td>
+            </tr>
+        </tfoot>
+    </table>
 
-        <table class="payslip-table">
-            <thead>
-                <tr class="border-top-btm">
-                    <th style="width: 25%;">Earnings</th>
-                    <th style="width: 12.5%;" class="text-right">YTD</th>
-                    <th style="width: 12.5%;" class="text-right border-right">Amount</th>
-                    <th style="width: 25%; padding-left: 10px;">Deductions</th>
-                    <th style="width: 12.5%;" class="text-right">YTD</th>
-                    <th style="width: 12.5%;" class="text-right">Amount</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>Basic Pay</td>
-                    <td class="text-right">{{ '{:,.2f}'.format(record.basic * month_idx) }}</td>
-                    <td class="text-right border-right">{{ '{:,.2f}'.format(record.basic) }}</td>
-                    <td style="padding-left: 10px;">National Insurance</td>
-                    <td class="text-right">0.00</td>
-                    <td class="text-right">0.00</td>
-                </tr>
-                <tr>
-                    <td>Medical Allowance</td>
-                    <td class="text-right">0.00</td>
-                    <td class="text-right border-right">0.00</td>
-                    <td style="padding-left: 10px;">Loss of Pay</td>
-                    <td class="text-right">0.00</td>
-                    <td class="text-right">0.00</td>
-                </tr>
-                <tr>
-                    <td>Housing Allowance</td>
-                    <td class="text-right">{{ '{:,.2f}'.format(record.hra * month_idx) }}</td>
-                    <td class="text-right border-right">{{ '{:,.2f}'.format(record.hra) }}</td>
-                    <td style="padding-left: 10px;">Loan Repayment</td>
-                    <td class="text-right">0.00</td>
-                    <td class="text-right">0.00</td>
-                </tr>
-                <tr>
-                    <td>Conveyance Allowance</td>
-                    <td class="text-right">0.00</td>
-                    <td class="text-right border-right">0.00</td>
-                    <td style="padding-left: 10px;">Advance Repayment</td>
-                    <td class="text-right">0.00</td>
-                    <td class="text-right">0.00</td>
-                </tr>
-                <tr>
-                    <td>Food Allowance</td>
-                    <td class="text-right">0.00</td>
-                    <td class="text-right border-right">0.00</td>
-                    <td style="padding-left: 10px;">Other Deductions</td>
-                    <td class="text-right">{{ '{:,.2f}'.format(record.deductions * month_idx) }}</td>
-                    <td class="text-right">{{ '{:,.2f}'.format(record.deductions) }}</td>
-                </tr>
-                <tr>
-                    <td>Overtime Allowance</td>
-                    <td class="text-right">0.00</td>
-                    <td class="text-right border-right">0.00</td>
-                    <td style="padding-left: 10px;"></td>
-                    <td class="text-right"></td>
-                    <td class="text-right"></td>
-                </tr>
-            </tbody>
-            <tfoot>
-                <tr class="border-top-btm" style="font-weight: bold;">
-                    <td>Total Earnings (Rounded)</td>
-                    <td class="text-right">{{ '{:,.2f}'.format((record.basic + record.hra) * month_idx) }}</td>
-                    <td class="text-right border-right">{{ '{:,.2f}'.format(record.basic + record.hra) }}</td>
-                    <td style="padding-left: 10px;">Total Deductions (Rounded)</td>
-                    <td class="text-right">{{ '{:,.2f}'.format(record.deductions * month_idx) }}</td>
-                    <td class="text-right">{{ '{:,.2f}'.format(record.deductions) }}</td>
-                </tr>
-                <tr class="border-btm" style="font-weight: bold;">
-                    <td colspan="3" class="border-right"></td>
-                    <td colspan="2" style="padding-left: 10px;">Net Pay (Rounded)</td>
-                    <td class="text-right">{{ '{:,.2f}'.format(record.net_salary) }}</td>
-                </tr>
-            </tfoot>
-        </table>
-
-        <div class="signature-area">
-            <div class="signature-line">Employer's Signature</div>
-            <div class="signature-line">Employee's Signature</div>
-        </div>
+    <hr>
+    <div class="text-center">
+        <button onclick="window.print()" class="btn btn-outline-primary btn-sm">
+            <i class="fas fa-print me-1"></i>Print Payslip
+        </button>
     </div>
 </div>
 {% endblock %}

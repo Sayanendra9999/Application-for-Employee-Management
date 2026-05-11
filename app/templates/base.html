@@ -137,6 +137,20 @@
                     style="padding:5px 10px; font-size:0.8rem;">
                     <i class="fas fa-umbrella-beach" style="width:16px; font-size:0.75rem;"></i><span>Holidays</span>
                 </a>
+                {% if is_manager %}
+                <hr style="margin:4px 10px; border-color:var(--border-color); opacity:0.3;">
+                <a href="{{ url_for('employee.my_team') }}" class="nav-link"
+                    style="padding:5px 10px; font-size:0.8rem;">
+                    <i class="fas fa-users" style="width:16px; font-size:0.75rem;"></i><span>My Team</span>
+                    {% if team_pending_count > 0 %}
+                    <span class="badge bg-warning text-dark ms-auto" style="font-size:0.6rem; padding:2px 6px; border-radius:8px;">{{ team_pending_count }}</span>
+                    {% endif %}
+                </a>
+                <a href="{{ url_for('employee.team_leaves') }}" class="nav-link"
+                    style="padding:5px 10px; font-size:0.8rem;">
+                    <i class="fas fa-calendar-check" style="width:16px; font-size:0.75rem;"></i><span>Team Leaves</span>
+                </a>
+                {% endif %}
             </div>
             {% endif %}
             {% endfor %}
